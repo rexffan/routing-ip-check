@@ -141,3 +141,23 @@ cloudflare target|CDN Trace|https://example.com/cdn-cgi/trace
 ## License
 
 MIT
+
+## Advanced Options
+
+默认会并发探测，速度比串行更快。可以用 `--concurrency` 调整并发数：
+
+```bash
+./egress-realip-check.sh --concurrency 8
+```
+
+如果想排查单个请求的行为，可以关闭并发：
+
+```bash
+./egress-realip-check.sh --no-concurrency
+```
+
+默认目标只包含已确认能通过 `/cdn-cgi/trace` 回显 IP 的站点。想额外尝试未确认目标，可以使用：
+
+```bash
+./egress-realip-check.sh --targets-all
+```

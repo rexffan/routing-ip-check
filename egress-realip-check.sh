@@ -17,7 +17,7 @@
 
 set -u
 
-VERSION="1.2.0"
+VERSION="1.3.0"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -26,7 +26,9 @@ PROXY_URL=""
 DO_ASN=1
 JSON=0
 INCLUDE_TARGETS=1
+INCLUDE_TARGETS_ALL=0
 TARGETS_ADDED=0
+CONCURRENCY=8
 
 R=$'\033[0m'
 BOLD=$'\033[1m'
@@ -53,30 +55,39 @@ PROBES=(
 )
 
 TARGET_PROBES=(
-  "x.com|Social|https://x.com/cdn-cgi/trace"
-  "twitter.com|Social|https://twitter.com/cdn-cgi/trace"
-  "linkedin.com|Social|https://linkedin.com/cdn-cgi/trace"
-  "quora.com|Social|https://quora.com/cdn-cgi/trace"
-  "medium.com|Social|https://medium.com/cdn-cgi/trace"
-  "wise.com|Finance|https://wise.com/cdn-cgi/trace"
-  "revolut.com|Finance|https://revolut.com/cdn-cgi/trace"
-  "LINE Bank TW|TW Finance|https://www.linebank.com.tw/cdn-cgi/trace"
-  "PX Pay|TW Finance|https://www.pxpay.com/cdn-cgi/trace"
-  "coinbase.com|Crypto|https://coinbase.com/cdn-cgi/trace"
-  "okx.com|Crypto|https://okx.com/cdn-cgi/trace"
-  "kraken.com|Crypto|https://kraken.com/cdn-cgi/trace"
-  "MaiCoin|TW Crypto|https://www.maicoin.com/cdn-cgi/trace"
-  "MAX Exchange|TW Crypto|https://max.maicoin.com/cdn-cgi/trace"
-  "temu.com|Shopping|https://temu.com/cdn-cgi/trace"
-  "shopify.com|Shopping|https://shopify.com/cdn-cgi/trace"
-  "ikea.com|Shopping|https://ikea.com/cdn-cgi/trace"
-  "Books TW|TW Shopping|https://www.books.com.tw/cdn-cgi/trace"
-  "Ruten|TW Shopping|https://www.ruten.com.tw/cdn-cgi/trace"
-  "Buy123|TW Shopping|https://www.buy123.com.tw/cdn-cgi/trace"
-  "citiesocial|TW Shopping|https://www.citiesocial.com/cdn-cgi/trace"
-  "openai.com|AI/Work|https://openai.com/cdn-cgi/trace"
-  "canva.com|AI/Work|https://canva.com/cdn-cgi/trace"
-  "notion.so|AI/Work|https://notion.so/cdn-cgi/trace"
+  "x.com|Social|https://x.com/cdn-cgi/trace|cf"
+  "twitter.com|Social|https://twitter.com/cdn-cgi/trace|cf"
+  "linkedin.com|Social|https://linkedin.com/cdn-cgi/trace|cf"
+  "quora.com|Social|https://quora.com/cdn-cgi/trace|cf"
+  "medium.com|Social|https://medium.com/cdn-cgi/trace|cf"
+  "wise.com|Finance|https://wise.com/cdn-cgi/trace|cf"
+  "revolut.com|Finance|https://revolut.com/cdn-cgi/trace|cf"
+  "LINE Bank TW|TW Finance|https://www.linebank.com.tw/cdn-cgi/trace|cf"
+  "PX Pay|TW Finance|https://www.pxpay.com/cdn-cgi/trace|cf"
+  "coinbase.com|Crypto|https://coinbase.com/cdn-cgi/trace|cf"
+  "okx.com|Crypto|https://okx.com/cdn-cgi/trace|cf"
+  "kraken.com|Crypto|https://kraken.com/cdn-cgi/trace|cf"
+  "MaiCoin|TW Crypto|https://www.maicoin.com/cdn-cgi/trace|cf"
+  "MAX Exchange|TW Crypto|https://max.maicoin.com/cdn-cgi/trace|cf"
+  "temu.com|Shopping|https://temu.com/cdn-cgi/trace|cf"
+  "shopify.com|Shopping|https://shopify.com/cdn-cgi/trace|cf"
+  "ikea.com|Shopping|https://ikea.com/cdn-cgi/trace|cf"
+  "Books TW|TW Shopping|https://www.books.com.tw/cdn-cgi/trace|cf"
+  "Ruten|TW Shopping|https://www.ruten.com.tw/cdn-cgi/trace|cf"
+  "Buy123|TW Shopping|https://www.buy123.com.tw/cdn-cgi/trace|cf"
+  "citiesocial|TW Shopping|https://www.citiesocial.com/cdn-cgi/trace|cf"
+  "openai.com|AI/Work|https://openai.com/cdn-cgi/trace|cf"
+  "canva.com|AI/Work|https://canva.com/cdn-cgi/trace|cf"
+  "notion.so|AI/Work|https://notion.so/cdn-cgi/trace|cf"
+)
+
+TARGET_ALL_PROBES=(
+  "facebook.com|Social|https://facebook.com/cdn-cgi/trace|guess"
+  "instagram.com|Social|https://instagram.com/cdn-cgi/trace|guess"
+  "paypal.com|Finance|https://paypal.com/cdn-cgi/trace|guess"
+  "amazon.com|Shopping|https://amazon.com/cdn-cgi/trace|guess"
+  "momo TW|TW Shopping|https://www.momoshop.com.tw/cdn-cgi/trace|guess"
+  "PChome TW|TW Shopping|https://24h.pchome.com.tw/cdn-cgi/trace|guess"
 )
 
 usage() {
@@ -93,7 +104,10 @@ Options:
       --no-asn            Do not query ISP/ASN metadata
       --json              Print machine-readable JSON lines
       --targets           Include categorized target-site probes (default)
+      --targets-all       Include unconfirmed target probes too
       --no-targets        Only run the basic IP echo probes
+      --concurrency N     Number of concurrent probes (default: 8)
+      --no-concurrency    Run probes serially
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace
       --file FILE         Add probes from FILE, one "name|url" or "name|cat|url" per line
@@ -104,6 +118,8 @@ Examples:
   ./egress-realip-check.sh --no-proxy
   ./egress-realip-check.sh --proxy socks5h://127.0.0.1:1080
   ./egress-realip-check.sh --targets
+  ./egress-realip-check.sh --targets-all
+  ./egress-realip-check.sh --concurrency 4
   ./egress-realip-check.sh --no-targets
   ./egress-realip-check.sh --cf example.com
   ./egress-realip-check.sh --add "my echo=https://echo.example.com/ip"
@@ -153,8 +169,16 @@ add_probe_file() {
 
     IFS='|' read -r name cat url _ <<< "$line"
     if [[ -z "${url:-}" ]]; then
+      if [[ -z "${cat:-}" ]]; then
+        printf 'warning: skipping bad line in %s: %s\n' "$file" "$line" >&2
+        continue
+      fi
       url="$cat"
       cat="Custom"
+    fi
+    if [[ -z "$name" || ! "$url" =~ ^https?:// ]]; then
+      printf 'warning: skipping bad line in %s: %s\n' "$file" "$line" >&2
+      continue
     fi
     add_probe "$name" "$cat" "$url"
   done < "$file"
@@ -166,6 +190,11 @@ add_target_probes() {
   for entry in "${TARGET_PROBES[@]}"; do
     PROBES+=("$entry")
   done
+  if [[ "$INCLUDE_TARGETS_ALL" -eq 1 ]]; then
+    for entry in "${TARGET_ALL_PROBES[@]}"; do
+      PROBES+=("$entry")
+    done
+  fi
   TARGETS_ADDED=1
 }
 
@@ -208,8 +237,23 @@ while [[ $# -gt 0 ]]; do
       INCLUDE_TARGETS=1
       shift
       ;;
+    --targets-all)
+      INCLUDE_TARGETS=1
+      INCLUDE_TARGETS_ALL=1
+      shift
+      ;;
     --no-targets)
       INCLUDE_TARGETS=0
+      shift
+      ;;
+    --concurrency)
+      [[ $# -ge 2 ]] || die "--concurrency needs a value"
+      CONCURRENCY="$2"
+      [[ "$CONCURRENCY" =~ ^[0-9]+$ && "$CONCURRENCY" -ge 1 ]] || die "--concurrency must be a positive integer"
+      shift 2
+      ;;
+    --no-concurrency)
+      CONCURRENCY=1
       shift
       ;;
     --add)
@@ -253,7 +297,8 @@ need_cmd grep
 need_cmd sort
 
 TMP_ROWS=$(mktemp)
-trap 'rm -f "$TMP_ROWS"' EXIT
+TMP_DIR=$(mktemp -d)
+trap 'rm -f "$TMP_ROWS"; rm -rf "$TMP_DIR"' EXIT
 
 curl_common=(
   --silent
@@ -261,7 +306,7 @@ curl_common=(
   --location
   --max-time "$TIMEOUT"
   --connect-timeout "$TIMEOUT"
-  --user-agent "egress-realip-check/$VERSION"
+  --user-agent "Mozilla/5.0 (compatible; egress-realip-check/$VERSION; +https://github.com/rexffan/egress-realip-check)"
 )
 
 if [[ "$NO_PROXY" -eq 1 ]]; then
@@ -272,26 +317,122 @@ if [[ -n "$PROXY_URL" ]]; then
   curl_common+=(--proxy "$PROXY_URL")
 fi
 
-extract_ip() {
-  local body="$1"
+is_bogon_ipv4() {
+  local ip="$1" a b c d
+  IFS='.' read -r a b c d <<< "$ip"
+  [[ "$a" =~ ^[0-9]+$ && "$b" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ && "$d" =~ ^[0-9]+$ ]] || return 0
+  [[ "$a" -le 255 && "$b" -le 255 && "$c" -le 255 && "$d" -le 255 ]] || return 0
+  [[ "$a" -eq 0 || "$a" -eq 10 || "$a" -eq 127 ]] && return 0
+  [[ "$a" -eq 169 && "$b" -eq 254 ]] && return 0
+  [[ "$a" -eq 172 && "$b" -ge 16 && "$b" -le 31 ]] && return 0
+  [[ "$a" -eq 192 && "$b" -eq 168 ]] && return 0
+  [[ "$a" -eq 100 && "$b" -ge 64 && "$b" -le 127 ]] && return 0
+  [[ "$a" -eq 198 && "$b" -eq 18 ]] && return 0
+  [[ "$a" -eq 192 && "$b" -eq 0 && "$c" -eq 2 ]] && return 0
+  [[ "$a" -eq 198 && "$b" -eq 51 && "$c" -eq 100 ]] && return 0
+  [[ "$a" -eq 203 && "$b" -eq 0 && "$c" -eq 113 ]] && return 0
+  [[ "$a" -ge 224 ]] && return 0
+  return 1
+}
 
+is_bogon_ipv6() {
+  local ip
+  ip=$(printf '%s' "$1" | tr 'A-F' 'a-f')
+  [[ "$ip" == "::" || "$ip" == "::1" || "$ip" == "0:0:0:0:0:0:0:1" ]] && return 0
+  [[ "$ip" =~ ^f[c-d] ]] && return 0
+  [[ "$ip" =~ ^fe[89ab] ]] && return 0
+  [[ "$ip" =~ ^2001:db8: ]] && return 0
+  return 1
+}
+
+is_bogon_ip() {
+  local ip="$1"
   if [[ "$IP_FLAG" == "-4" ]]; then
-    printf '%s\n' "$body" |
-      grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' |
-      awk -F. '($1<=255 && $2<=255 && $3<=255 && $4<=255){print; exit}'
+    is_bogon_ipv4 "$ip"
   else
-    printf '%s\n' "$body" |
-      grep -Eio '([0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}' |
-      awk 'length($0) >= 3 {print; exit}'
+    is_bogon_ipv6 "$ip"
   fi
 }
 
+extract_ip() {
+  local body="$1" url="$2" candidate saw_bogon ip
+  saw_bogon=0
+
+  if [[ "$url" == *"/cdn-cgi/trace"* ]]; then
+    if ! printf '%s\n' "$body" | grep -Eq '^(fl|h)='; then
+      printf '|not-cf-trace'
+      return
+    fi
+    ip=$(printf '%s\n' "$body" | awk -F= '$1=="ip"{print $2; exit}')
+    if [[ -z "$ip" ]]; then
+      printf '|no-ip-in-body'
+      return
+    fi
+    if is_bogon_ip "$ip"; then
+      printf '|bogon-ip'
+      return
+    fi
+    printf '%s|' "$ip"
+    return
+  fi
+
+  if [[ "$IP_FLAG" == "-4" ]]; then
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      if is_bogon_ip "$candidate"; then
+        saw_bogon=1
+        continue
+      fi
+      printf '%s|' "$candidate"
+      return
+    done < <(printf '%s\n' "$body" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | awk -F. '($1<=255 && $2<=255 && $3<=255 && $4<=255){print}')
+  else
+    while IFS= read -r candidate; do
+      [[ -z "$candidate" ]] && continue
+      if is_bogon_ip "$candidate"; then
+        saw_bogon=1
+        continue
+      fi
+      printf '%s|' "$candidate"
+      return
+    done < <(printf '%s\n' "$body" | grep -Eio '([0-9a-f]{1,4}:){2,7}[0-9a-f]{0,4}|::1')
+  fi
+
+  if [[ "$saw_bogon" -eq 1 ]]; then
+    printf '|bogon-ip'
+  else
+    printf '|no-ip-in-body'
+  fi
+}
+
+declare -A ASN_CACHE=()
+
 asn_lookup() {
-  local ip="$1"
-  local info status country isp asn
+  local ip="$1" info org country isp asn status cache_key
+  cache_key="$ip"
 
   if [[ "$DO_ASN" -eq 0 ]]; then
     printf '|||'
+    return
+  fi
+
+  if [[ -n "${ASN_CACHE[$cache_key]+x}" ]]; then
+    printf '%s' "${ASN_CACHE[$cache_key]}"
+    return
+  fi
+
+  info=$(curl --silent --show-error --max-time 5 "https://ipinfo.io/$ip/json" 2>/dev/null || true)
+  org=$(printf '%s\n' "$info" | sed -nE 's/.*"org"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -1)
+  country=$(printf '%s\n' "$info" | sed -nE 's/.*"country"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -1)
+
+  if [[ -n "$org" ]]; then
+    asn="${org%% *}"
+    isp="$org"
+    [[ "$isp" == "$asn" ]] && isp="N/A"
+    [[ "$isp" != "N/A" ]] && isp="${isp#"$asn"}" && isp="${isp# }"
+    [[ -z "$country" ]] && country="N/A"
+    ASN_CACHE[$cache_key]="$(clean_field "$country")|$(clean_field "$isp")|$(clean_field "$asn")"
+    printf '%s' "${ASN_CACHE[$cache_key]}"
     return
   fi
 
@@ -304,41 +445,75 @@ asn_lookup() {
   asn=$(printf '%s\n' "$info" | sed -n '4p')
 
   if [[ "$status" != "success" ]]; then
-    printf 'N/A|N/A|N/A'
-    return
+    ASN_CACHE[$cache_key]="N/A|N/A|N/A"
+  else
+    ASN_CACHE[$cache_key]="$(clean_field "$country")|$(clean_field "$isp")|$(clean_field "$asn")"
   fi
 
-  printf '%s|%s|%s' "$(clean_field "$country")" "$(clean_field "$isp")" "$(clean_field "$asn")"
+  printf '%s' "${ASN_CACHE[$cache_key]}"
 }
 
 probe_one() {
   local name="$1" cat="$2" url="$3"
-  local host body rc ip meta country isp asn status
+  local host body_file body meta rc http_code remote_ip ip_result ip reason status
 
   host=$(strip_url_host "$url")
-  body=$(curl "${curl_common[@]}" "$IP_FLAG" "$url" 2>/dev/null)
+  body_file=$(mktemp "$TMP_DIR/body.XXXXXX")
+  meta=$(curl "${curl_common[@]}" "$IP_FLAG" -o "$body_file" \
+    --write-out 'http=%{http_code}\nremote=%{remote_ip}\n' "$url" 2>/dev/null)
   rc=$?
+  body=$(<"$body_file")
+  rm -f "$body_file"
+
+  http_code=$(printf '%s\n' "$meta" | sed -n 's/^http=//p' | tail -1)
+  remote_ip=$(printf '%s\n' "$meta" | sed -n 's/^remote=//p' | tail -1)
+  [[ -z "$http_code" ]] && http_code="000"
+
   ip=""
+  reason=""
 
-  if [[ "$rc" -eq 0 && -n "$body" ]]; then
-    ip=$(extract_ip "$body")
-  fi
-
-  if [[ -z "$ip" ]]; then
+  if [[ "$http_code" =~ ^[1-9][0-9][0-9]$ && ! "$http_code" =~ ^2 ]]; then
     status="FAIL"
-    country=""
-    isp=""
-    asn=""
+    reason="http-status-$http_code"
+  elif [[ "$rc" -ne 0 ]]; then
+    status="FAIL"
+    if [[ "$rc" -eq 28 ]]; then
+      reason="connect-timeout"
+    else
+      reason="curl-error-$rc"
+    fi
   else
-    status="OK"
-    meta=$(asn_lookup "$ip")
-    IFS='|' read -r country isp asn <<< "$meta"
+    ip_result=$(extract_ip "$body" "$url")
+    IFS='|' read -r ip reason <<< "$ip_result"
+    if [[ -z "$ip" ]]; then
+      status="FAIL"
+      [[ -z "$reason" ]] && reason="no-ip-in-body"
+    else
+      status="OK"
+    fi
   fi
 
-  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
     "$status" "$(clean_field "$name")" "$(clean_field "$cat")" "$(clean_field "$host")" \
-    "$(clean_field "$url")" "$(clean_field "$ip")" "$(clean_field "$isp")" \
-    "$(clean_field "$asn")" "$(clean_field "$country")" >> "$TMP_ROWS"
+    "$(clean_field "$url")" "$(clean_field "$ip")" "" "" "" \
+    "$(clean_field "$http_code")" "$(clean_field "$reason")" "$(clean_field "$remote_ip")"
+}
+
+enrich_rows() {
+  local enriched status name cat host url ip isp asn country http_code reason remote_ip meta
+  enriched=$(mktemp)
+
+  while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip; do
+    if [[ "$status" == "OK" && -n "$ip" ]]; then
+      meta=$(asn_lookup "$ip")
+      IFS='|' read -r country isp asn <<< "$meta"
+    fi
+    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+      "$status" "$name" "$cat" "$host" "$url" "$ip" "$isp" "$asn" "$country" \
+      "$http_code" "$reason" "$remote_ip" >> "$enriched"
+  done < "$TMP_ROWS"
+
+  mv "$enriched" "$TMP_ROWS"
 }
 
 print_header() {
@@ -351,15 +526,16 @@ print_header() {
   else
     printf '%s\n' "${GRAY}Proxy mode: curl default environment, if any.${R}"
   fi
+  printf '%s\n' "${GRAY}Concurrency: $CONCURRENCY.${R}"
   printf '\n'
 }
 
 print_table() {
   printf '  %-4s  %-24s  %-11s  %-16s  %-39s  %-18s  %-28s  %-12s  %s\n' \
-    "OK" "Probe" "Category" "Observed IP" "Host" "ASN" "ISP" "Country" "URL"
+    "OK" "Probe" "Category" "IP / Reason" "Host" "ASN" "ISP" "Country" "URL"
   printf '  %s\n' "$(printf '%*s' 160 '' | tr ' ' '-')"
 
-  while IFS='|' read -r status name cat host url ip isp asn country; do
+  while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip; do
     local mark color shown_ip shown_isp shown_asn shown_country
 
     if [[ "$status" == "OK" ]]; then
@@ -370,7 +546,7 @@ print_table() {
       color="$RED"
     fi
 
-    shown_ip="${ip:-timeout/no-ip}"
+    shown_ip="${ip:-${reason:-timeout/no-ip}}"
     shown_isp="${isp:-N/A}"
     shown_asn="${asn:-N/A}"
     shown_country="${country:-N/A}"
@@ -388,11 +564,12 @@ print_table() {
 }
 
 print_json() {
-  while IFS='|' read -r status name cat host url ip isp asn country; do
-    printf '{"status":"%s","name":"%s","category":"%s","host":"%s","url":"%s","ip":"%s","isp":"%s","asn":"%s","country":"%s"}\n' \
+  while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip; do
+    printf '{"status":"%s","name":"%s","category":"%s","host":"%s","url":"%s","ip":"%s","isp":"%s","asn":"%s","country":"%s","http_code":"%s","reason":"%s","remote_ip":"%s"}\n' \
       "$(json_escape "$status")" "$(json_escape "$name")" "$(json_escape "$cat")" \
       "$(json_escape "$host")" "$(json_escape "$url")" "$(json_escape "$ip")" \
-      "$(json_escape "$isp")" "$(json_escape "$asn")" "$(json_escape "$country")"
+      "$(json_escape "$isp")" "$(json_escape "$asn")" "$(json_escape "$country")" \
+      "$(json_escape "$http_code")" "$(json_escape "$reason")" "$(json_escape "$remote_ip")"
   done < "$TMP_ROWS"
 }
 
@@ -430,16 +607,57 @@ print_summary() {
     printf '\n  %s%sMultiple observed egress IPs detected.%s This usually means domain/proxy/policy routing is active.\n' "$YELLOW" "$BOLD" "$R"
   fi
 
-  printf '\n%sTip:%s for a Cloudflare-backed target, run: %s --cf example.com\n' "$CYAN" "$R" "$0"
+  local cmd_name
+  cmd_name="$0"
+  if [[ "$cmd_name" == /dev/fd/* || "$cmd_name" == "bash" ]]; then
+    cmd_name="egress-realip-check.sh"
+  fi
+  printf '\n%sTip:%s for a Cloudflare-backed target, run: %s --cf example.com\n' "$CYAN" "$R" "$cmd_name"
 }
 
-print_header
+run_probes() {
+  local total idx entry name cat url out running
+  total=${#PROBES[@]}
 
-for entry in "${PROBES[@]}"; do
-  IFS='|' read -r name cat url <<< "$entry"
-  printf '  %schecking%s %s\n' "$GRAY" "$R" "$name" >&2
-  probe_one "$name" "$cat" "$url"
-done
+  if [[ "$CONCURRENCY" -le 1 ]]; then
+    idx=0
+    for entry in "${PROBES[@]}"; do
+      IFS='|' read -r name cat url _ <<< "$entry"
+      printf '  %schecking%s %s\n' "$GRAY" "$R" "$name" >&2
+      probe_one "$name" "$cat" "$url" > "$TMP_DIR/$idx.row"
+      idx=$((idx + 1))
+    done
+  else
+    printf '  %srunning %s probes with concurrency %s...%s\n' "$GRAY" "$total" "$CONCURRENCY" "$R" >&2
+    idx=0
+    for entry in "${PROBES[@]}"; do
+      while true; do
+        running=$(jobs -pr | wc -l | tr -d ' ')
+        [[ "$running" -lt "$CONCURRENCY" ]] && break
+        sleep 0.1
+      done
+      IFS='|' read -r name cat url _ <<< "$entry"
+      out="$TMP_DIR/$idx.row"
+      ( probe_one "$name" "$cat" "$url" > "$out" ) &
+      idx=$((idx + 1))
+    done
+    wait
+  fi
+
+  idx=0
+  while [[ "$idx" -lt "$total" ]]; do
+    if [[ -f "$TMP_DIR/$idx.row" ]]; then
+      cat "$TMP_DIR/$idx.row" >> "$TMP_ROWS"
+    fi
+    idx=$((idx + 1))
+  done
+}
+
+if [[ "$JSON" -ne 1 ]]; then
+  print_header
+fi
+run_probes
+enrich_rows
 
 if [[ "$JSON" -eq 1 ]]; then
   print_json
