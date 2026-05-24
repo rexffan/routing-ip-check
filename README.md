@@ -17,14 +17,27 @@
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 
+## One-line Run
+
+不需要 clone 仓库，直接在 VPS 上一键运行：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh)
+```
+
+带参数也可以：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-proxy
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --cf example.com
+```
+
 ## Install
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/OWNER/egress-realip-check/main/egress-realip-check.sh
+curl -fsSLO https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh
 chmod +x egress-realip-check.sh
 ```
-
-> 发布到 GitHub 后，把上面的 `OWNER` 替换成你的 GitHub 用户名或组织名。
 
 ## Usage
 
