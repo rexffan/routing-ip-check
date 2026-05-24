@@ -2,7 +2,7 @@
 
 检测 VPS 访问不同网站时，远端真实看到的出口 IP。
 
-很多台湾 VPS、代理、WARP、NAT、策略路由或 CDN 分流环境里，`mtr` / `traceroute` 的第一个公网 hop 并不等于网站看到的源 IP。这个脚本不使用路由 hop 作为结果，而是直接请求多个远端 IP 回显服务，让远端服务返回它实际观察到的 HTTP/HTTPS 客户端 IP，再汇总 IP、ISP、ASN 和国家/地区。
+很多 VPS、代理、WARP、NAT、策略路由或 CDN 分流环境里，`mtr` / `traceroute` 的第一个公网 hop 并不等于网站看到的源 IP。这个脚本不使用路由 hop 作为结果，而是直接请求多个远端 IP 回显服务，让远端服务返回它实际观察到的 HTTP/HTTPS 客户端 IP，再汇总 IP、ISP、ASN 和国家/地区。
 
 ## Features
 
