@@ -23,21 +23,21 @@
 不需要 clone 仓库，直接在 VPS 上一键运行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh)
+bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh)
 ```
 
 默认会包含基础 IP echo 和分类目标探测。带参数也可以：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-proxy
-bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-targets
-bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --cf example.com
+bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --no-proxy
+bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --no-targets
+bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --cf example.com
 ```
 
 ## Install
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh
+curl -fsSLO https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh
 chmod +x egress-realip-check.sh
 ```
 
