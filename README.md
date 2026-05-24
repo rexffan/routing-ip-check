@@ -14,6 +14,7 @@
 - 可忽略本机代理环境变量，检测直连出口
 - 可指定 `socks5h` / HTTP 代理，检测代理出口
 - 支持 Cloudflare 站点的 `/cdn-cgi/trace` 目标站视角探测
+- 支持社交、金融、购物、交易所、AI/办公等分类目标探测
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 
@@ -29,6 +30,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-proxy
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --targets
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --cf example.com
 ```
 
@@ -74,6 +76,14 @@ chmod +x egress-realip-check.sh
 ```bash
 ./egress-realip-check.sh --cf example.com
 ```
+
+加入常见分类目标探测：
+
+```bash
+./egress-realip-check.sh --targets
+```
+
+`--targets` 会追加一组可回显 IP 的常见目标，覆盖社交、金融、购物、交易所、AI/办公等分类。它主要使用目标网站的 `/cdn-cgi/trace`，所以只有支持该接口的站点才能返回真实观察到的 IP。
 
 添加自定义 IP 回显接口：
 

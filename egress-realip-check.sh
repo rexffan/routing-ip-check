@@ -17,7 +17,7 @@
 
 set -u
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -50,6 +50,25 @@ PROBES=(
   "ipip.net|Asia Echo|https://myip.ipip.net"
 )
 
+TARGET_PROBES=(
+  "x.com|Social|https://x.com/cdn-cgi/trace"
+  "twitter.com|Social|https://twitter.com/cdn-cgi/trace"
+  "linkedin.com|Social|https://linkedin.com/cdn-cgi/trace"
+  "quora.com|Social|https://quora.com/cdn-cgi/trace"
+  "medium.com|Social|https://medium.com/cdn-cgi/trace"
+  "wise.com|Finance|https://wise.com/cdn-cgi/trace"
+  "revolut.com|Finance|https://revolut.com/cdn-cgi/trace"
+  "coinbase.com|Crypto|https://coinbase.com/cdn-cgi/trace"
+  "okx.com|Crypto|https://okx.com/cdn-cgi/trace"
+  "kraken.com|Crypto|https://kraken.com/cdn-cgi/trace"
+  "temu.com|Shopping|https://temu.com/cdn-cgi/trace"
+  "shopify.com|Shopping|https://shopify.com/cdn-cgi/trace"
+  "ikea.com|Shopping|https://ikea.com/cdn-cgi/trace"
+  "openai.com|AI/Work|https://openai.com/cdn-cgi/trace"
+  "canva.com|AI/Work|https://canva.com/cdn-cgi/trace"
+  "notion.so|AI/Work|https://notion.so/cdn-cgi/trace"
+)
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -63,6 +82,8 @@ Options:
       --proxy URL         Use a curl proxy, for example socks5h://127.0.0.1:1080
       --no-asn            Do not query ISP/ASN metadata
       --json              Print machine-readable JSON lines
+      --targets           Add categorized target-site probes
+                          (social/finance/shopping/crypto/AI; Cloudflare trace only)
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace
       --file FILE         Add probes from FILE, one "name|url" or "name|cat|url" per line
@@ -72,6 +93,7 @@ Examples:
   ./egress-realip-check.sh -4
   ./egress-realip-check.sh --no-proxy
   ./egress-realip-check.sh --proxy socks5h://127.0.0.1:1080
+  ./egress-realip-check.sh --targets
   ./egress-realip-check.sh --cf example.com
   ./egress-realip-check.sh --add "my echo=https://echo.example.com/ip"
 
@@ -127,6 +149,13 @@ add_probe_file() {
   done < "$file"
 }
 
+add_target_probes() {
+  local entry
+  for entry in "${TARGET_PROBES[@]}"; do
+    PROBES+=("$entry")
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -4|--ipv4)
@@ -160,6 +189,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --json)
       JSON=1
+      shift
+      ;;
+    --targets)
+      add_target_probes
       shift
       ;;
     --add)
