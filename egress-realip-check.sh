@@ -17,7 +17,7 @@
 
 set -u
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -25,6 +25,8 @@ NO_PROXY=0
 PROXY_URL=""
 DO_ASN=1
 JSON=0
+INCLUDE_TARGETS=1
+TARGETS_ADDED=0
 
 R=$'\033[0m'
 BOLD=$'\033[1m'
@@ -90,8 +92,8 @@ Options:
       --proxy URL         Use a curl proxy, for example socks5h://127.0.0.1:1080
       --no-asn            Do not query ISP/ASN metadata
       --json              Print machine-readable JSON lines
-      --targets           Add categorized target-site probes
-                          (social/finance/shopping/crypto/AI; Cloudflare trace only)
+      --targets           Include categorized target-site probes (default)
+      --no-targets        Only run the basic IP echo probes
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace
       --file FILE         Add probes from FILE, one "name|url" or "name|cat|url" per line
@@ -102,6 +104,7 @@ Examples:
   ./egress-realip-check.sh --no-proxy
   ./egress-realip-check.sh --proxy socks5h://127.0.0.1:1080
   ./egress-realip-check.sh --targets
+  ./egress-realip-check.sh --no-targets
   ./egress-realip-check.sh --cf example.com
   ./egress-realip-check.sh --add "my echo=https://echo.example.com/ip"
 
@@ -159,9 +162,11 @@ add_probe_file() {
 
 add_target_probes() {
   local entry
+  [[ "$TARGETS_ADDED" -eq 1 ]] && return
   for entry in "${TARGET_PROBES[@]}"; do
     PROBES+=("$entry")
   done
+  TARGETS_ADDED=1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -200,7 +205,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --targets)
-      add_target_probes
+      INCLUDE_TARGETS=1
+      shift
+      ;;
+    --no-targets)
+      INCLUDE_TARGETS=0
       shift
       ;;
     --add)
@@ -232,6 +241,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$INCLUDE_TARGETS" -eq 1 ]]; then
+  add_target_probes
+fi
 
 need_cmd curl
 need_cmd sed

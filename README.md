@@ -26,11 +26,11 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh)
 ```
 
-带参数也可以：
+默认会包含基础 IP echo 和分类目标探测。带参数也可以：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-proxy
-bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --targets
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --no-targets
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/egress-realip-check/main/egress-realip-check.sh) --cf example.com
 ```
 
@@ -77,13 +77,13 @@ chmod +x egress-realip-check.sh
 ./egress-realip-check.sh --cf example.com
 ```
 
-加入常见分类目标探测：
+分类目标探测默认开启。只跑基础 IP echo 探测：
 
 ```bash
-./egress-realip-check.sh --targets
+./egress-realip-check.sh --no-targets
 ```
 
-`--targets` 会追加一组可回显 IP 的常见目标，覆盖社交、金融、购物、交易所、AI/办公、台湾本地金融/购物等分类。它主要使用目标网站的 `/cdn-cgi/trace`，所以只有支持该接口的站点才能返回真实观察到的 IP。
+默认会追加一组可回显 IP 的常见目标，覆盖社交、金融、购物、交易所、AI/办公、台湾本地金融/购物等分类。它主要使用目标网站的 `/cdn-cgi/trace`，所以只有支持该接口的站点才能返回真实观察到的 IP。
 
 添加自定义 IP 回显接口：
 
