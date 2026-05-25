@@ -1,6 +1,12 @@
 # Routing Source IP Detection
 
-检测 VPS 访问不同网站时，远端真实看到的出口 IP。
+检测 VPS 访问不同网站时，远端真实看到的出口 IP；并对常见大型服务（Meta / Google / Cloudflare / OpenAI / Reddit / GitHub）做"身份核验"，识别 DNS 劫持、BGP 劫持、本地机房中间人。
+
+## What's New in 1.6.0
+
+- `--audit PRESET` —— 内置 6 个服务身份核验 preset（meta、google、cloudflare、openai、reddit、github、all）。对比 dest IP 的 ASN 跟 TLS 证书 issuer，任一不符即报警。
+- 启动时**自动检查依赖**，缺什么就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）装上；非 root 时自动用 `sudo`。可用 `--no-install` 关掉。
+- 内置便携 `timeout` wrapper —— BSD/macOS 没有 GNU `timeout` 也能跑 `openssl s_client`。
 
 ## How It Works
 
@@ -30,6 +36,8 @@
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 - 默认遮蔽 IP 后两段，`--show-ip` 取消遮蔽
+- `--audit PRESET` 服务身份核验（ASN + 证书指纹），内置 6 个常用服务 preset
+- 启动时自动安装缺失的系统依赖（apt / dnf / yum / apk / pacman / zypper / brew）
 
 ## One-line Run
 
@@ -42,9 +50,20 @@ bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/mai
 默认会包含基础 IP echo 和分类目标探测。带参数也可以：
 
 ```bash
+# 直连出口
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-proxy
+
+# 只跑基础 IP echo
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets
+
+# 测某个 Cloudflare 站点的视角
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --cf example.com
+
+# 服务身份核验（首次跑会自动装 openssl）
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --audit meta
+
+# 一次跑完所有 6 个 preset
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets --audit all --concurrency 8
 ```
 
 ## Install
@@ -140,12 +159,18 @@ local-bank|Finance|https://www.example-bank.com/|connectivity
 
 ## Requirements
 
+**必需**（任何模式都要）：
+
 - Bash
 - curl
-- sed
-- awk
-- grep
-- sort
+- sed / awk / grep / sort（一般系统都自带）
+
+**`--audit` 才需要**：
+
+- openssl（拉远端 TLS 证书核对 issuer）
+- `timeout`（GNU coreutils；没有也能跑，会走内置 bash 模拟实现）
+
+**自动安装**：脚本启动时会检查这些命令，缺什么就用系统包管理器装：`apt` / `dnf` / `yum` / `apk` / `pacman` / `zypper` / `brew`。非 root 时自动用 `sudo`。不希望自动装就加 `--no-install`，脚本会改成直接报错。
 
 ## License
 
@@ -237,6 +262,57 @@ MIT
 
   Verdict: 2 mismatches detected
 ```
+
+### 如何解读 Audit 输出
+
+每个 audit 行最后一列是 `verdict`，含义对照：
+
+| Verdict | 含义 | 是否报警 |
+|---|---|---|
+| `ok` | ASN 和证书都符合预期 | ✅ 正常 |
+| `ok-asn-only` | ASN 符合，本地没装 openssl，无法验证证书 | ⚠️ 弱通过（建议装 openssl 再跑） |
+| `ok-cert-only` | 证书符合，但 ASN 查询失败（比如 ipinfo.io 拒绝） | ⚠️ 弱通过 |
+| `ASN mismatch` | dest IP 落在预期 ASN 之外 —— **强信号**：DNS/路由层被引到非官方机房 | 🟥 报警 |
+| `cert mismatch` | ASN 对了，但 TLS 证书 issuer 不是该服务的合法 CA —— **MITM 铁证** | 🟥 报警 |
+| `cert fetch failed` | openssl 连不上对端 / 握手失败 | ⚠️ 需要排查 |
+| `unreachable` | 连接根本没建立（超时/refused） | ⚠️ 可能是本地网络问题 |
+| `inconclusive` | ASN 和证书都没拿到 | ⚠️ 无法判定 |
+
+**判定原则**（per-host short-circuit）：
+
+1. 先看 ASN —— 不符合就直接 `ASN mismatch`，跳过证书检查（第一种方法已经定案，无需再查证书）。
+2. ASN 符合才会拉证书，与该 preset 的期望 issuer regex 对比。
+3. 出现任何 `ASN mismatch` 或 `cert mismatch` 都应当人工复核 —— 它们对应的劫持形态：
+   - `ASN mismatch` → **DNS 劫持**（本地 DNS 投毒到本地机房 IP）或 **BGP 劫持**（路由层把 AS32934 的 IP 段引到别处）
+   - `cert mismatch` → **DPI/透明代理 MITM**（流量到了真 IP，但被中间盒重新封 TLS）
+
+**给在服务器自动判定的建议**：
+
+```bash
+# 跑完只看是否有任何 mismatch
+output=$(./routing-ip-check.sh --audit all --no-targets 2>&1)
+if grep -qE 'mismatch|unreachable' <<< "$output"; then
+  echo "ABNORMAL"
+else
+  echo "ALL CLEAN"
+fi
+
+# 或者解析 JSON 输出（机器友好）
+./routing-ip-check.sh --audit meta --json | jq 'select(.kind == "connectivity")'
+```
+
+**预期基线**（干净直连环境，无代理无劫持时应该看到）：
+
+| Preset | 期望 verdict 分布 |
+|---|---|
+| `meta` | 9 个全部 `ok`（或 `ok-asn-only` 当 ipinfo 失败时） |
+| `google` | 8 个全部 `ok` |
+| `cloudflare` | 5 个全部 `ok`（`1.1.1.1` 的 cert issuer 是 `SSL.com`，已加入白名单） |
+| `openai` | 5 个全部 `ok`（CF-fronted） |
+| `reddit` | 5 个全部 `ok`（DigiCert/Fastly） |
+| `github` | 6 个全部 `ok`（github.com 用 Sectigo，githubusercontent 用 Let's Encrypt R12） |
+
+任何偏离这个基线（特别是出现 `ASN mismatch` / `cert mismatch`）都值得追查。
 
 ### Dependency management
 
