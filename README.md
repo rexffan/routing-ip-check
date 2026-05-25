@@ -1,4 +1,4 @@
-# egress-realip-check
+# Routing Source IP Detection
 
 检测 VPS 访问不同网站时，远端真实看到的出口 IP。
 

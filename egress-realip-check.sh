@@ -2,6 +2,7 @@
 #
 # egress-realip-check.sh
 #
+# Routing Source IP Detection
 # Show the real egress IP observed by remote HTTP services.
 #
 # Why this exists:
@@ -886,7 +887,7 @@ trunc() {
 }
 
 print_header() {
-  local title="Egress Real-IP Check"
+  local title="Routing Source IP Detection"
   local meta=" ${IP_LABEL}  ${G_BULLET}  "
   local mode
   if [[ "$NO_PROXY" -eq 1 ]]; then
