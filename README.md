@@ -150,14 +150,64 @@ MIT
 ./egress-realip-check.sh --concurrency 8
 ```
 
+运行过程中只显示整体百分比进度；完成后会清屏并只保留本次检测结果。`--json` 模式不会清屏，也不会把进度混入 stdout。
+
 也可以显式指定串行模式：
 
 ```bash
 ./egress-realip-check.sh --no-concurrency
 ```
 
-默认目标只包含已确认能通过 `/cdn-cgi/trace` 回显 IP 的站点。想额外尝试未确认目标，可以使用：
+### Probe Kinds
+
+脚本有三种探测类型，各自语义不同：
+
+| Kind | 探测内容 | 能告诉你什么 |
+|---|---|---|
+| `ipecho` | 命中已知回显接口（ipify、ifconfig.me 等） | 远端 HTTP 服务看到的源 IP |
+| `cf` | 命中 `/cdn-cgi/trace`（Cloudflare 站点专用） | 该 CF 站点真实观察到的源 IP |
+| `connectivity` | HEAD 站点根路径 `/` | **仅可达性** — 状态码、Server header、TTFB、目的 IP。**不会**报告你的出口 IP |
+
+默认目标只含 `ipecho` + `cf`（已实测确认）。开 `--targets-all` 会**额外**追加一批台湾政府/银行/论坛/电信/媒体作为 `connectivity` 探针：
 
 ```bash
 ./egress-realip-check.sh --targets-all
+```
+
+这些 connectivity 目标**绝大多数不在 Cloudflare 上**，因此**无法**报告你的源 IP。但它们能回答另外两类问题：
+
+- 我的出口能不能到这些域名？（`connect-timeout` vs 200）
+- 路由策略是否对这些域名生效？（不同域名走不同出口时，TTFB 和目的 IP 会不同）
+
+输出会自动**分两段**显示 —— Egress IP Probes 和 Connectivity Probes 各自一节，统计也分开。
+
+自定义 connectivity 目标：
+
+```bash
+./egress-realip-check.sh --connectivity www.bot.com.tw
+./egress-realip-check.sh --connectivity www.president.gov.tw
+```
+
+或用 `--file probes.txt`，每行格式：`name|category|url|kind`，例如：
+
+```
+總統府|TW Gov|https://www.president.gov.tw/|connectivity
+```
+
+### Privacy & Aesthetics
+
+默认 IP 后两段会用 `•` 遮蔽（IPv4 后 2 octets，IPv6 后 2 hextets），方便直接截图分享：
+
+```
+✓  Cloudflare trace        CDN Trace     175.180.•••.•••  TW • AS4780 Digital United Inc.
+```
+
+需要完整 IP（排障时）传 `--show-ip`。注意 `--json` 输出始终保留完整 IP，给脚本消费用。
+
+终端不支持 Unicode/256-color 时会自动回退到 ASCII：
+
+```bash
+./egress-realip-check.sh --ascii         # 强制 ASCII 字形
+NO_COLOR=1 ./egress-realip-check.sh      # 关闭所有 ANSI 颜色
+./egress-realip-check.sh --verbose       # 输出中额外显示 URL 列
 ```
