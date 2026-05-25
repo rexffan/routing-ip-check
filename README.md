@@ -36,76 +36,76 @@
 不需要 clone 仓库，直接在 VPS 上一键运行：
 
 ```bash
-bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh)
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh)
 ```
 
 默认会包含基础 IP echo 和分类目标探测。带参数也可以：
 
 ```bash
-bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --no-proxy
-bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --no-targets
-bash <(curl -fsSL https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh) --cf example.com
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-proxy
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --cf example.com
 ```
 
 ## Install
 
 ```bash
-curl -fsSLO https://github.com/rexffan/egress-realip-check/raw/refs/heads/main/egress-realip-check.sh
-chmod +x egress-realip-check.sh
+curl -fsSLO https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh
+chmod +x routing-ip-check.sh
 ```
 
 ## Usage
 
 ```bash
-./egress-realip-check.sh
+./routing-ip-check.sh
 ```
 
 强制 IPv4：
 
 ```bash
-./egress-realip-check.sh -4
+./routing-ip-check.sh -4
 ```
 
 强制 IPv6：
 
 ```bash
-./egress-realip-check.sh -6
+./routing-ip-check.sh -6
 ```
 
 忽略 `http_proxy`、`https_proxy` 等环境变量，检测直连出口：
 
 ```bash
-./egress-realip-check.sh --no-proxy
+./routing-ip-check.sh --no-proxy
 ```
 
 检测指定代理的出口：
 
 ```bash
-./egress-realip-check.sh --proxy socks5h://127.0.0.1:1080
+./routing-ip-check.sh --proxy socks5h://127.0.0.1:1080
 ```
 
 探测 Cloudflare 站点视角：
 
 ```bash
-./egress-realip-check.sh --cf example.com
+./routing-ip-check.sh --cf example.com
 ```
 
 分类目标探测默认开启。只跑基础 IP echo 探测：
 
 ```bash
-./egress-realip-check.sh --no-targets
+./routing-ip-check.sh --no-targets
 ```
 
 添加自定义 IP 回显接口：
 
 ```bash
-./egress-realip-check.sh --add "my-echo=https://echo.example.com/ip"
+./routing-ip-check.sh --add "my-echo=https://echo.example.com/ip"
 ```
 
 输出 JSON Lines：
 
 ```bash
-./egress-realip-check.sh --json
+./routing-ip-check.sh --json
 ```
 
 ## Custom Probe File
@@ -131,7 +131,7 @@ local-bank|Finance|https://www.example-bank.com/|connectivity
 运行：
 
 ```bash
-./egress-realip-check.sh --file probes.txt
+./routing-ip-check.sh --file probes.txt
 ```
 
 ## Limitations
@@ -156,7 +156,7 @@ MIT
 默认串行探测，方便观察每个目标的请求顺序。想加速时用 `--concurrency` 开启并发：
 
 ```bash
-./egress-realip-check.sh --concurrency 8
+./routing-ip-check.sh --concurrency 8
 ```
 
 运行过程中只显示整体百分比进度（`Probing` 探测阶段 + `Resolving` ASN 解析阶段，同一条进度线平滑过渡）；完成后清屏，只保留本次检测结果。`--json` 模式不会清屏，也不会把进度混入 stdout。
@@ -164,7 +164,7 @@ MIT
 也可以显式指定串行：
 
 ```bash
-./egress-realip-check.sh --no-concurrency
+./routing-ip-check.sh --no-concurrency
 ```
 
 ### Probe Kinds
@@ -180,7 +180,7 @@ MIT
 默认目标只含 `ipecho` + `cf`（已实测确认）。开 `--targets-all` 会**额外**追加一批本地政府/银行/论坛/电信/媒体作为 `connectivity` 探针：
 
 ```bash
-./egress-realip-check.sh --targets-all
+./routing-ip-check.sh --targets-all
 ```
 
 这些 connectivity 目标**绝大多数不在 Cloudflare 上**，因此无法报告你的源 IP。但它们能回答另外两类问题：
@@ -193,8 +193,8 @@ MIT
 自定义 connectivity 目标：
 
 ```bash
-./egress-realip-check.sh --connectivity www.example-bank.com
-./egress-realip-check.sh --connectivity www.example-gov.org
+./routing-ip-check.sh --connectivity www.example-bank.com
+./routing-ip-check.sh --connectivity www.example-gov.org
 ```
 
 ### Privacy & Aesthetics
@@ -210,7 +210,7 @@ MIT
 终端不支持 Unicode/256-color 时会自动回退到 ASCII：
 
 ```bash
-./egress-realip-check.sh --ascii         # 强制 ASCII 字形
-NO_COLOR=1 ./egress-realip-check.sh      # 关闭所有 ANSI 颜色
-./egress-realip-check.sh --verbose       # 输出中额外显示 URL 列
+./routing-ip-check.sh --ascii         # 强制 ASCII 字形
+NO_COLOR=1 ./routing-ip-check.sh      # 关闭所有 ANSI 颜色
+./routing-ip-check.sh --verbose       # 输出中额外显示 URL 列
 ```

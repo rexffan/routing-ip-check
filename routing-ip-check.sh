@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# egress-realip-check.sh
+# routing-ip-check.sh
 #
 # Routing Source IP Detection — show the real egress IP observed by remote
 # HTTP services.
@@ -240,7 +240,7 @@ TARGET_ALL_PROBES=("${CONNECTIVITY_PROBES[@]}")
 usage() {
   cat <<'EOF'
 Usage:
-  egress-realip-check.sh [options]
+  routing-ip-check.sh [options]
 
 Options:
   -4, --ipv4              Force IPv4 checks (default)
@@ -269,14 +269,14 @@ Environment:
   NO_COLOR=1              Disable ANSI colors entirely.
 
 Examples:
-  ./egress-realip-check.sh -4
-  ./egress-realip-check.sh --no-proxy
-  ./egress-realip-check.sh --proxy socks5h://127.0.0.1:1080
-  ./egress-realip-check.sh --targets-all
-  ./egress-realip-check.sh --concurrency 8
-  ./egress-realip-check.sh --show-ip
-  ./egress-realip-check.sh --cf example.com
-  ./egress-realip-check.sh --add "my echo=https://echo.example.com/ip"
+  ./routing-ip-check.sh -4
+  ./routing-ip-check.sh --no-proxy
+  ./routing-ip-check.sh --proxy socks5h://127.0.0.1:1080
+  ./routing-ip-check.sh --targets-all
+  ./routing-ip-check.sh --concurrency 8
+  ./routing-ip-check.sh --show-ip
+  ./routing-ip-check.sh --cf example.com
+  ./routing-ip-check.sh --add "my echo=https://echo.example.com/ip"
 
 Notes:
   Routing Source IP Detection measures the real source IP seen by remote HTTP
@@ -565,7 +565,7 @@ curl_common=(
   --location
   --max-time "$TIMEOUT"
   --connect-timeout "$TIMEOUT"
-  --user-agent "Mozilla/5.0 (compatible; routing-source-ip-detection/$VERSION; +https://github.com/rexffan/egress-realip-check)"
+  --user-agent "Mozilla/5.0 (compatible; routing-source-ip-detection/$VERSION; +https://github.com/rexffan/routing-ip-check)"
 )
 
 if [[ "$NO_PROXY" -eq 1 ]]; then
@@ -1184,7 +1184,7 @@ print_summary() {
   local cmd_name
   cmd_name="$0"
   if [[ "$cmd_name" == /dev/fd/* || "$cmd_name" == "bash" ]]; then
-    cmd_name="egress-realip-check.sh"
+    cmd_name="routing-ip-check.sh"
   fi
 
   section_header "Hints"
