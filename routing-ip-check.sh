@@ -28,7 +28,6 @@ PROXY_URL=""
 DO_ASN=1
 JSON=0
 INCLUDE_TARGETS=1
-INCLUDE_TARGETS_ALL=0
 TARGETS_ADDED=0
 CONCURRENCY=1
 MASK_IP=1
@@ -117,7 +116,7 @@ G_BAR_FILL="" G_BAR_EMPTY="" G_TIP="" G_MASK=""
 # Probe entry: name|category|url|kind
 #   kind=ipecho       — generic IP echo, scan response body for our IP
 #   kind=cf           — Cloudflare /cdn-cgi/trace, strict parse
-#   kind=connectivity — reachability probe only (HEAD /), no IP extraction
+#   kind=connectivity — internal audit reachability probe, no IP extraction
 PROBES=(
   "ipify|IP Echo|https://api.ipify.org|ipecho"
   "ifconfig.me|IP Echo|https://ifconfig.me/ip|ipecho"
@@ -161,83 +160,6 @@ TARGET_PROBES=(
   "Buy123|Shopping|https://www.buy123.com.tw/cdn-cgi/trace|cf"
   "citiesocial|Shopping|https://www.citiesocial.com/cdn-cgi/trace|cf"
 )
-
-# CONNECTIVITY_PROBES — only run with --targets-all.
-# These hit the site root (HEAD /) for pure reachability diagnostics — they
-# can NOT report your egress IP (the site doesn't echo it). What they do show:
-#   • whether your egress can reach this domain at all (connect-timeout vs 200)
-#   • whether route to this domain is split / blocked / via a CGN/proxy
-#   • the destination IP we connected to (helps spot DNS or anycast routing)
-# Reclassified from the old "guess" CF-trace probes after we confirmed almost
-# none of these are actually on Cloudflare.
-CONNECTIVITY_PROBES=(
-  # Global
-  "twitter.com|Social|https://twitter.com/|connectivity"
-  "linkedin.com|Social|https://www.linkedin.com/|connectivity"
-  "medium.com|Social|https://medium.com/|connectivity"
-  "facebook.com|Social|https://www.facebook.com/|connectivity"
-  "instagram.com|Social|https://www.instagram.com/|connectivity"
-  "paypal.com|Finance|https://www.paypal.com/|connectivity"
-  "amazon.com|Shopping|https://www.amazon.com/|connectivity"
-  "temu.com|Shopping|https://www.temu.com/|connectivity"
-  "shopify.com|Shopping|https://www.shopify.com/|connectivity"
-  "ikea.com|Shopping|https://www.ikea.com/|connectivity"
-  # Forums / community
-  "Mobile01|Forum|https://www.mobile01.com/|connectivity"
-  "PTT|Forum|https://www.ptt.cc/|connectivity"
-  "PIXNET|Forum|https://www.pixnet.net/|connectivity"
-  # Media / news
-  "UDN|Media|https://udn.com/|connectivity"
-  "LTN|Media|https://www.ltn.com.tw/|connectivity"
-  "ETtoday|Media|https://www.ettoday.net/|connectivity"
-  "TVBS|Media|https://news.tvbs.com.tw/|connectivity"
-  "FTV|Media|https://www.ftvnews.com.tw/|connectivity"
-  # Finance / banks
-  "E.SUN Bank|Finance|https://www.esunbank.com.tw/|connectivity"
-  "Cathay United|Finance|https://www.cathaybk.com.tw/|connectivity"
-  "CTBC|Finance|https://www.ctbcbank.com/|connectivity"
-  "Fubon|Finance|https://www.fubon.com/|connectivity"
-  "Mega Bank|Finance|https://www.megabank.com.tw/|connectivity"
-  "bot.com.tw|Finance|https://www.bot.com.tw/|connectivity"
-  "SinoPac|Finance|https://bank.sinopac.com/|connectivity"
-  "Taishin|Finance|https://www.taishinbank.com.tw/|connectivity"
-  "First Bank|Finance|https://www.firstbank.com.tw/|connectivity"
-  "MoneyDJ|Finance|https://www.moneydj.com/|connectivity"
-  "cnYES|Finance|https://www.cnyes.com/|connectivity"
-  # Government / public
-  "president.gov.tw|Gov|https://www.president.gov.tw/|connectivity"
-  "ey.gov.tw|Gov|https://www.ey.gov.tw/|connectivity"
-  "ly.gov.tw|Gov|https://www.ly.gov.tw/|connectivity"
-  "judicial.gov.tw|Gov|https://www.judicial.gov.tw/|connectivity"
-  "moi.gov.tw|Gov|https://www.moi.gov.tw/|connectivity"
-  "mof.gov.tw|Gov|https://www.mof.gov.tw/|connectivity"
-  "mohw.gov.tw|Gov|https://www.mohw.gov.tw/|connectivity"
-  "moe.gov.tw|Gov|https://www.moe.gov.tw/|connectivity"
-  "NHI|Gov|https://www.nhi.gov.tw/|connectivity"
-  "CDC|Gov|https://www.cdc.gov.tw/|connectivity"
-  "etax.nat.gov.tw|Gov|https://www.etax.nat.gov.tw/|connectivity"
-  "post.gov.tw|Gov|https://www.post.gov.tw/|connectivity"
-  # Telecom / ISP
-  "Chunghwa Telecom|Telecom|https://www.cht.com.tw/|connectivity"
-  "TWM|Telecom|https://www.taiwanmobile.com/|connectivity"
-  "FET|Telecom|https://www.fetnet.net/|connectivity"
-  # Career / shopping fallbacks
-  "1111.com.tw|Career|https://www.1111.com.tw/|connectivity"
-  "591.com.tw|Shopping|https://www.591.com.tw/|connectivity"
-  "momoshop|Shopping|https://www.momoshop.com.tw/|connectivity"
-  "PChome|Shopping|https://24h.pchome.com.tw/|connectivity"
-  "Shopee|Shopping|https://shopee.tw/|connectivity"
-  # Transport / ticketing
-  "THSR|Transport|https://www.thsrc.com.tw/|connectivity"
-  "TRA|Transport|https://www.railway.gov.tw/|connectivity"
-  "EasyCard|Transport|https://www.easycard.com.tw/|connectivity"
-  # Misc
-  "KKBOX|Media|https://www.kkbox.com/|connectivity"
-  "LINE|App|https://line.me/|connectivity"
-)
-
-# Legacy alias — older code paths may still reference TARGET_ALL_PROBES.
-TARGET_ALL_PROBES=("${CONNECTIVITY_PROBES[@]}")
 
 # ----------------------------------------------------------------------------
 # Audit presets — service-identity checks.
@@ -341,7 +263,7 @@ audit_preset_asn() {
     cloudflare)  printf '13335' ;;
     openai)      printf '13335' ;;                # CF-fronted
     reddit)      printf '54113 16509' ;;          # Fastly + AWS for media subdomains
-    github)      printf '36459 13335' ;;          # GitHub own + CF for githubusercontent
+    github)      printf '36459 13335 8075 54113' ;; # GitHub own + CF + Azure + Fastly
   esac
 }
 
@@ -381,20 +303,18 @@ Options:
       --no-asn            Do not query ISP/ASN metadata
       --json              Print machine-readable JSON lines (always full IP)
       --targets           Include categorized target-site probes (default)
-      --targets-all       Include unconfirmed target probes too (gov, banks, forums, etc.)
       --no-targets        Disable categorized target-site probes
       --concurrency N     Number of concurrent probes (default: 1)
       --no-concurrency    Run probes serially
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace
-      --connectivity HOST Add a reachability probe (HEAD https://HOST/)
       --audit PRESET      Service-identity audit (compare dest IP ASN + TLS
                           cert issuer to expected). Repeatable. PRESET ∈
                           { meta, google, cloudflare, openai, reddit, github,
                           all }. Default: all 6 presets.
       --no-audit          Disable the default service-identity audit
       --file FILE         Add probes from FILE — "name|url" or "name|cat|url"
-                          or "name|cat|url|kind" (kind: ipecho|cf|connectivity)
+                          or "name|cat|url|kind" (kind: ipecho|cf)
       --show-ip           Reveal full IP addresses (default: mask last 2 segments)
       --ascii             Disable Unicode glyphs and box-drawing (ASCII-only)
       --verbose           Show the URL column in the results table
@@ -410,7 +330,6 @@ Examples:
   ./routing-ip-check.sh -4
   ./routing-ip-check.sh --no-proxy
   ./routing-ip-check.sh --proxy socks5h://127.0.0.1:1080
-  ./routing-ip-check.sh --targets-all
   ./routing-ip-check.sh --concurrency 8
   ./routing-ip-check.sh --show-ip
   ./routing-ip-check.sh --cf example.com
@@ -572,7 +491,7 @@ add_probe_file() {
   # Supported line formats (pipe-separated, comments start with #):
   #   name|url
   #   name|category|url
-  #   name|category|url|kind        (kind ∈ ipecho|cf|connectivity)
+  #   name|category|url|kind        (kind ∈ ipecho|cf)
   local line name cat url kind
   while IFS= read -r line || [[ -n "$line" ]]; do
     line=$(printf '%s' "$line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
@@ -592,7 +511,7 @@ add_probe_file() {
       continue
     fi
     case "${kind:-ipecho}" in
-      ipecho|cf|connectivity) ;;
+      ipecho|cf) ;;
       *)
         printf 'warning: skipping bad line in %s: %s\n' "$file" "$line" >&2
         continue
@@ -608,11 +527,6 @@ add_target_probes() {
   for entry in "${TARGET_PROBES[@]}"; do
     PROBES+=("$entry")
   done
-  if [[ "$INCLUDE_TARGETS_ALL" -eq 1 ]]; then
-    for entry in "${CONNECTIVITY_PROBES[@]}"; do
-      PROBES+=("$entry")
-    done
-  fi
   TARGETS_ADDED=1
 }
 
@@ -655,11 +569,6 @@ while [[ $# -gt 0 ]]; do
       INCLUDE_TARGETS=1
       shift
       ;;
-    --targets-all)
-      INCLUDE_TARGETS=1
-      INCLUDE_TARGETS_ALL=1
-      shift
-      ;;
     --no-targets)
       INCLUDE_TARGETS=0
       shift
@@ -683,11 +592,6 @@ while [[ $# -gt 0 ]]; do
     --cf)
       [[ $# -ge 2 ]] || die "--cf needs a host"
       add_probe "$2 Cloudflare trace" "CDN Trace" "https://$2/cdn-cgi/trace" "cf"
-      shift 2
-      ;;
-    --connectivity)
-      [[ $# -ge 2 ]] || die "--connectivity needs a host"
-      add_probe "$2" "Custom" "https://$2/" "connectivity"
       shift 2
       ;;
     --audit)
@@ -1401,80 +1305,15 @@ print_egress_row() {
   fi
 }
 
-# Connectivity probes — different semantics, different layout.
-# Glyph + color encodes HTTP outcome:
-#   2xx → green ✓        (clean response)
-#   3xx → amber ✓        (redirect)
-#   4xx/5xx → amber ✓    (reachable but blocked/erroring — TLS handshake worked)
-#   timeout/refused → red ✗
-print_conn_row() {
-  local status="$1" name="$2" cat="$3" http_code="$4" reason="$5" remote_ip="$6" server="$7" ttfb_ms="$8" url="$9"
-  local total_w_name=22 total_w_cat=12 total_w_code=4 total_w_rip=16
-  local glyph color
-
-  if [[ "$status" != "OK" ]]; then
-    glyph="$G_FAIL"; color="$C_FAIL"
-  else
-    case "$http_code" in
-      2*) glyph="$G_OK"; color="$C_OK" ;;
-      3*) glyph="$G_OK"; color="$C_WARN" ;;
-      4*|5*) glyph="$G_OK"; color="$C_WARN" ;;
-      *)  glyph="$G_OK"; color="$C_SUBTLE" ;;
-    esac
-  fi
-
-  name=$(trunc "$name" "$total_w_name")
-  cat=$(trunc "$cat" "$total_w_cat")
-  local code_disp="$http_code"
-  [[ "$status" != "OK" ]] && code_disp="—"
-
-  local masked_dst=""
-  [[ -n "$remote_ip" ]] && masked_dst=$(mask_ip "$remote_ip")
-
-  local right_bits=""
-  [[ -n "$ttfb_ms" && "$ttfb_ms" -gt 0 ]] && right_bits="${ttfb_ms}ms"
-  if [[ -n "$server" ]]; then
-    local short_server
-    short_server=$(trunc "$server" 22)
-    [[ -n "$right_bits" ]] && right_bits="$right_bits $G_BULLET $short_server" || right_bits="$short_server"
-  fi
-  if [[ "$status" != "OK" ]]; then
-    right_bits="$reason"
-  fi
-
-  printf '  %s%s%s  %-*s  %s%-*s%s  %s%-*s%s  %s%-*s%s  %s%s%s\n' \
-    "$color" "$glyph" "$R" \
-    "$total_w_name" "$name" \
-    "$C_SUBTLE" "$total_w_cat" "$cat" "$R" \
-    "$BOLD" "$total_w_code" "$code_disp" "$R" \
-    "$C_SUBTLE" "$total_w_rip" "${masked_dst:-—}" "$R" \
-    "$C_SUBTLE" "$right_bits" "$R"
-
-  if [[ "$SHOW_VERBOSE" -eq 1 ]]; then
-    printf '     %s%s %s%s\n' "$C_DIM" "$G_DOT" "$url" "$R"
-  fi
-}
-
 print_table() {
-  local has_egress has_conn
+  local has_egress
   has_egress=$(awk -F'|' '$13!="connectivity"{print; exit}' "$TMP_ROWS")
-  has_conn=$(awk -F'|' '$13=="connectivity"{print; exit}' "$TMP_ROWS")
 
   if [[ -n "$has_egress" ]]; then
     section_header "Egress IP Probes"
     while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip kind server ttfb_ms; do
       [[ "$kind" == "connectivity" ]] && continue
       print_egress_row "$status" "$name" "$cat" "$ip" "$isp" "$asn" "$country" "$reason" "$url"
-    done < "$TMP_ROWS"
-  fi
-
-  if [[ -n "$has_conn" ]]; then
-    section_header "Connectivity Probes"
-    printf '  %s%s%s %sReachability only — these targets do NOT report your egress IP.%s\n' \
-      "$C_DIM" "$G_TIP" "$R" "$C_DIM" "$R"
-    while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip kind server ttfb_ms; do
-      [[ "$kind" != "connectivity" ]] && continue
-      print_conn_row "$status" "$name" "$cat" "$http_code" "$reason" "$remote_ip" "$server" "$ttfb_ms" "$url"
     done < "$TMP_ROWS"
   fi
 }
@@ -1527,10 +1366,10 @@ print_summary() {
   unique=$(awk -F'|' '$1=="OK" && $13!="connectivity" && $6!=""{print $6}' "$TMP_ROWS" | sort -u | wc -l | tr -d ' ')
 
   # Connectivity stats
-  cn_total=$(awk -F'|' '$13=="connectivity"{n++} END{print n+0}' "$TMP_ROWS")
-  cn_ok=$(awk -F'|' '$13=="connectivity" && $1=="OK"{n++} END{print n+0}' "$TMP_ROWS")
+  cn_total=$(awk -F'|' '$13=="connectivity" && $3 !~ /^audit:/{n++} END{print n+0}' "$TMP_ROWS")
+  cn_ok=$(awk -F'|' '$13=="connectivity" && $3 !~ /^audit:/ && $1=="OK"{n++} END{print n+0}' "$TMP_ROWS")
   cn_fail=$(( cn_total - cn_ok ))
-  cn_block=$(awk -F'|' '$13=="connectivity" && $1=="OK" && ($10 ~ /^4/ || $10 ~ /^5/){n++} END{print n+0}' "$TMP_ROWS")
+  cn_block=$(awk -F'|' '$13=="connectivity" && $3 !~ /^audit:/ && $1=="OK" && ($10 ~ /^4/ || $10 ~ /^5/){n++} END{print n+0}' "$TMP_ROWS")
 
   section_header "Summary"
   if [[ "$eg_total" -gt 0 ]]; then
@@ -1619,12 +1458,6 @@ print_summary() {
   fi
   printf '    %s%s%s try %s%s --cf example.com%s to test a Cloudflare-fronted target\n' \
     "$C_DIM" "$G_TIP" "$R" "$BOLD" "$cmd_name" "$R"
-  if [[ "$INCLUDE_TARGETS_ALL" -eq 0 ]]; then
-    printf '    %s%s%s use %s--targets-all%s to add reachability probes for gov/banks/forums\n' \
-      "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
-    printf '    %s%s%s connectivity probes %s%s%s %sreport reachability + latency only — they do not echo your IP%s\n' \
-      "$C_DIM" "$G_TIP" "$R" "$C_DIM" "$G_DASH" "$R" "$C_DIM" "$R"
-  fi
   printf '\n'
 }
 

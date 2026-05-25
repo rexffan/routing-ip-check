@@ -15,7 +15,6 @@
 
 1. **ipecho 类**：直接命中通用 IP 回显接口（ipify、ifconfig.me、icanhazip 等），从响应 body 里提取 IPv4/IPv6。
 2. **cf 类**：命中 Cloudflare 站点的 `/cdn-cgi/trace` 端点，严格解析 `ip=` 行 —— 这是该 CF 站点观察到你的真实源 IP。
-3. **connectivity 类**：对不会回显 IP 的目标（政府、银行、电信、媒体等不在 CDN 上的站点）做 HEAD `/` 探测，只记录可达性、HTTP 状态、`Server` header、TTFB 和目的 IP —— **不会**返回你的出口 IP，但能告诉你"这个域名走得通吗、路由策略生效了吗"。
 
 每次探测之后，脚本对所有 OK 的出口 IP 做 ASN/ISP/国家查询（`ipinfo.io`，自动缓存去重），最后输出：
 - 每个探测的结果一行
@@ -33,7 +32,6 @@
 - 可忽略本机代理环境变量检测直连出口；也可指定 `socks5h` / HTTP 代理检测代理出口
 - 支持 Cloudflare 任意站点的 `/cdn-cgi/trace` 目标视角探测
 - 内置一组覆盖社交、金融、购物、交易所、AI/办公、本地论坛/媒体的目标
-- 开 `--targets-all` 可追加更多本地政府、银行、电信、传统媒体、运输等连通性探针
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 - 默认遮蔽 IP 后两段，`--show-ip` 取消遮蔽
@@ -138,14 +136,14 @@ name|category|url
 name|category|url|kind
 ```
 
-`kind` 取值：`ipecho`、`cf`、`connectivity`（省略时默认 `ipecho`）。
+`kind` 取值：`ipecho`、`cf`（省略时默认 `ipecho`）。
 
 示例：
 
 ```text
 my echo|https://echo.example.com/ip
 cloudflare target|CDN Trace|https://example.com/cdn-cgi/trace
-local-bank|Finance|https://www.example-bank.com/|connectivity
+my-cf-site|Custom|https://example.com/cdn-cgi/trace|cf
 ```
 
 运行：
@@ -156,7 +154,7 @@ local-bank|Finance|https://www.example-bank.com/|connectivity
 
 ## Limitations
 
-只有目标主动回显客户端 IP 才能得到真实出口 IP（`ipecho` 和 `cf` 类）。其余站点只能用 `connectivity` 类做可达性诊断，**无法**报告你的出口 IP。
+只有目标主动回显客户端 IP 才能得到真实出口 IP。脚本默认只把能回显 IP 的 `ipecho` 和 Cloudflare `/cdn-cgi/trace` 目标作为出口探针；不会把普通站点 HEAD 可达性当成出口 IP 证据。
 
 ## Requirements
 
@@ -195,33 +193,12 @@ MIT
 
 ### Probe Kinds
 
-脚本有三种探测类型：
+脚本有两种公开探测类型：
 
 | Kind | 探测内容 | 能告诉你什么 |
 |---|---|---|
 | `ipecho` | 命中已知回显接口（ipify、ifconfig.me 等） | 远端 HTTP 服务看到的源 IP |
 | `cf` | 命中 `/cdn-cgi/trace`（Cloudflare 站点专用） | 该 CF 站点真实观察到的源 IP |
-| `connectivity` | HEAD 站点根路径 `/` | **仅可达性** — 状态码、Server header、TTFB、目的 IP。**不会**报告你的出口 IP |
-
-默认目标只含 `ipecho` + `cf`（已实测确认）。开 `--targets-all` 会**额外**追加一批本地政府/银行/论坛/电信/媒体作为 `connectivity` 探针：
-
-```bash
-./routing-ip-check.sh --targets-all
-```
-
-这些 connectivity 目标**绝大多数不在 Cloudflare 上**，因此无法报告你的源 IP。但它们能回答另外两类问题：
-
-- 我的出口能不能到这些域名？（`connect-timeout` vs 200）
-- 路由策略是否对这些域名生效？（不同域名走不同出口时，TTFB 和目的 IP 会不同）
-
-输出会自动**分两段**显示 —— Egress IP Probes 和 Connectivity Probes 各自一节，统计也分开。
-
-自定义 connectivity 目标：
-
-```bash
-./routing-ip-check.sh --connectivity www.example-bank.com
-./routing-ip-check.sh --connectivity www.example-gov.org
-```
 
 ### Service Audit（`--audit`）
 
@@ -245,7 +222,7 @@ MIT
 | `cloudflare` | cloudflare.com / 1.1.1.1 / dash / workers / developers | AS13335 | Cloudflare / DigiCert / SSL.com / WE1 |
 | `openai` | openai.com / chatgpt.com / api / platform | AS13335 (CF-fronted) | DigiCert / WE1 / GTS CA |
 | `reddit` | reddit.com / old.reddit.com / *.redd.it | AS54113 (Fastly) / AS16509 (AWS) | DigiCert / Amazon / Let's Encrypt |
-| `github` | github.com / api / gist / codeload / githubusercontent | AS36459 / AS13335 | DigiCert / Sectigo / Let's Encrypt (R12) |
+| `github` | github.com / api / gist / codeload / githubusercontent | AS36459 / AS13335 / AS8075 / AS54113 | DigiCert / Sectigo / Let's Encrypt (R12) |
 
 **判定逻辑（per-host short-circuit）**：
 
@@ -304,7 +281,7 @@ else
 fi
 
 # 或者解析 JSON 输出（机器友好）
-./routing-ip-check.sh --audit meta --json | jq 'select(.kind == "connectivity")'
+./routing-ip-check.sh --audit meta --json | jq 'select(.category == "audit:meta")'
 ```
 
 **预期基线**（干净直连环境，无代理无劫持时应该看到）：
