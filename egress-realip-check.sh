@@ -28,7 +28,7 @@ JSON=0
 INCLUDE_TARGETS=1
 INCLUDE_TARGETS_ALL=0
 TARGETS_ADDED=0
-CONCURRENCY=8
+CONCURRENCY=1
 
 R=$'\033[0m'
 BOLD=$'\033[1m'
@@ -106,7 +106,7 @@ Options:
       --targets           Include categorized target-site probes (default)
       --targets-all       Include unconfirmed target probes too
       --no-targets        Only run the basic IP echo probes
-      --concurrency N     Number of concurrent probes (default: 8)
+      --concurrency N     Number of concurrent probes (default: 1)
       --no-concurrency    Run probes serially
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace

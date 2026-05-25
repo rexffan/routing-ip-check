@@ -144,13 +144,13 @@ MIT
 
 ## Advanced Options
 
-默认会并发探测，速度比串行更快。可以用 `--concurrency` 调整并发数：
+默认会串行探测，方便观察每个目标的请求顺序。想加速时可以用 `--concurrency` 开启并发：
 
 ```bash
 ./egress-realip-check.sh --concurrency 8
 ```
 
-如果想排查单个请求的行为，可以关闭并发：
+也可以显式指定串行模式：
 
 ```bash
 ./egress-realip-check.sh --no-concurrency
