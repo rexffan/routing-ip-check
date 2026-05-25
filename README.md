@@ -4,7 +4,8 @@
 
 ## What's New in 1.6.0
 
-- `--audit PRESET` —— 内置 6 个服务身份核验 preset（meta、google、cloudflare、openai、reddit、github、all）。对比 dest IP 的 ASN 跟 TLS 证书 issuer，任一不符即提示异常；其中 `meta` 已扩展到 Facebook / Instagram / WhatsApp / Threads / Meta CDN/API 的非登录深度审计。
+- 裸的一键运行默认包含：基础 IP echo、分类目标探测、以及 6 个服务身份核验 preset（meta、google、cloudflare、openai、reddit、github）。
+- `--audit PRESET` —— 指定服务身份核验 preset；`--no-audit` 可关闭默认 6 preset。对比 dest IP 的 ASN 跟 TLS 证书 issuer，任一不符即提示异常；其中 `meta` 已扩展到 Facebook / Instagram / WhatsApp / Threads / Meta CDN/API 的非登录深度审计。
 - 启动时**自动检查依赖**，缺什么就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）装上；非 root 时自动用 `sudo`。可用 `--no-install` 关掉。
 - 内置便携 `timeout` wrapper —— BSD/macOS 没有 GNU `timeout` 也能跑 `openssl s_client`。
 
@@ -36,34 +37,34 @@
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 - 默认遮蔽 IP 后两段，`--show-ip` 取消遮蔽
-- `--audit PRESET` 服务身份核验（ASN + 证书指纹），内置 6 个常用服务 preset；`meta` 为非登录深度审计
+- 默认运行 6 个 `--audit` preset；可用 `--no-audit` 关闭，或用 `--audit meta` 只跑指定 preset
 - 启动时自动安装缺失的系统依赖（apt / dnf / yum / apk / pacman / zypper / brew）
 
 ## One-line Run
 
-不需要 clone 仓库，直接在 VPS 上一键运行。下面这条默认就会包含**基础 IP echo** 和**分类目标探测**：
+不需要 clone 仓库，直接在 VPS 上一键运行。下面这条默认就会包含**基础 IP echo**、**分类目标探测**，以及 **6 个 preset**（Meta / Google / Cloudflare / OpenAI / Reddit / GitHub）：
 
 ```bash
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh)
 ```
 
-也就是说，不加任何参数时已经会跑默认分类目标；只有想**只跑基础 IP echo** 时才需要加 `--no-targets`。带参数也可以：
+也就是说，不加任何参数时已经会跑默认分类目标和 6 个特别检测；只有想**只跑基础 IP echo** 时才需要加 `--no-targets --no-audit`。带参数也可以：
 
 ```bash
 # 直连出口
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-proxy
 
 # 只跑基础 IP echo
-bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets --no-audit
 
 # 测某个 Cloudflare 站点的视角
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --cf example.com
 
-# 服务身份核验（首次跑会自动装 openssl）
+# 只跑 Meta 非登录深度审计（首次跑会自动装 openssl）
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --audit meta
 
-# 一次跑完所有 6 个 preset
-bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets --audit all --concurrency 8
+# 关闭 6 个 preset，只保留 IP echo + 分类目标
+bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-audit
 ```
 
 ## Install
@@ -109,10 +110,10 @@ chmod +x routing-ip-check.sh
 ./routing-ip-check.sh --cf example.com
 ```
 
-分类目标探测默认开启。只跑基础 IP echo 探测：
+分类目标探测和 6 个 audit preset 默认开启。只跑基础 IP echo 探测：
 
 ```bash
-./routing-ip-check.sh --no-targets
+./routing-ip-check.sh --no-targets --no-audit
 ```
 
 添加自定义 IP 回显接口：
@@ -165,7 +166,7 @@ local-bank|Finance|https://www.example-bank.com/|connectivity
 - curl
 - sed / awk / grep / sort（一般系统都自带）
 
-**`--audit` 才需要**：
+**默认 6 个 audit preset 会需要**：
 
 - openssl（拉远端 TLS 证书核对 issuer）
 - `timeout`（GNU coreutils；没有也能跑，会走内置 bash 模拟实现）
@@ -229,9 +230,10 @@ MIT
 注意：`--audit` 检查的是"目标服务身份"而不是"目标服务看到的 source IP"。Meta、GitHub、Google、OpenAI 等站点通常不会在普通请求里回显你的 source IP；因此在不登录账号、拿不到账号活动 IP 的前提下，脚本不会声称已经确认 Meta 看到的出口 IP。`--audit meta` 的作用是尽量覆盖更多 Meta 入口、API 与 CDN 域名，判断它们是否仍然解析/连接到 Meta 官方网络与正常证书链。
 
 ```bash
-./routing-ip-check.sh --audit meta
+./routing-ip-check.sh                          # 默认一次跑完所有 6 个 preset
+./routing-ip-check.sh --audit meta             # 只跑 Meta preset
 ./routing-ip-check.sh --audit google --audit github
-./routing-ip-check.sh --audit all              # 一次跑完所有 preset
+./routing-ip-check.sh --no-audit               # 关闭服务身份核验
 ```
 
 支持的 preset：
@@ -320,7 +322,7 @@ fi
 
 ### Dependency management
 
-脚本启动时会检查 `curl / sed / awk / grep / sort`（开 `--audit` 还会要求 `openssl`），缺啥就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）自动装。非 root 时会自动用 `sudo`。
+脚本启动时会检查 `curl / sed / awk / grep / sort`。因为默认会跑 6 个 audit preset，所以默认也会要求 `openssl`；如果加 `--no-audit`，则不需要证书审计。缺啥就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）自动装。非 root 时会自动用 `sudo`。
 
 如果你不希望被脚本自动安装，加 `--no-install`：
 

@@ -35,6 +35,7 @@ MASK_IP=1
 ASCII_MODE=0
 SHOW_VERBOSE=0
 AUDIT_PRESETS=()        # set by --audit PRESET (may repeat)
+AUDIT_DEFAULT=1         # default one-shot run includes all audit presets
 
 # Terminal capability detection
 USE_COLOR=1
@@ -381,7 +382,7 @@ Options:
       --json              Print machine-readable JSON lines (always full IP)
       --targets           Include categorized target-site probes (default)
       --targets-all       Include unconfirmed target probes too (gov, banks, forums, etc.)
-      --no-targets        Only run the basic IP echo probes
+      --no-targets        Disable categorized target-site probes
       --concurrency N     Number of concurrent probes (default: 1)
       --no-concurrency    Run probes serially
       --add NAME=URL      Add a custom IP echo URL
@@ -390,8 +391,8 @@ Options:
       --audit PRESET      Service-identity audit (compare dest IP ASN + TLS
                           cert issuer to expected). Repeatable. PRESET ∈
                           { meta, google, cloudflare, openai, reddit, github,
-                          all }. Cert check is skipped when ASN already
-                          disagrees with expected.
+                          all }. Default: all 6 presets.
+      --no-audit          Disable the default service-identity audit
       --file FILE         Add probes from FILE — "name|url" or "name|cat|url"
                           or "name|cat|url|kind" (kind: ipecho|cf|connectivity)
       --show-ip           Reveal full IP addresses (default: mask last 2 segments)
@@ -413,6 +414,7 @@ Examples:
   ./routing-ip-check.sh --concurrency 8
   ./routing-ip-check.sh --show-ip
   ./routing-ip-check.sh --cf example.com
+  ./routing-ip-check.sh --no-targets --no-audit
   ./routing-ip-check.sh --add "my echo=https://echo.example.com/ip"
 
 Notes:
@@ -690,6 +692,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --audit)
       [[ $# -ge 2 ]] || die "--audit needs a PRESET name"
+      AUDIT_DEFAULT=0
       if [[ "$2" == "all" ]]; then
         for p in $(audit_preset_list); do AUDIT_PRESETS+=("$p"); done
       else
@@ -699,6 +702,11 @@ while [[ $# -gt 0 ]]; do
         esac
       fi
       shift 2
+      ;;
+    --no-audit)
+      AUDIT_DEFAULT=0
+      AUDIT_PRESETS=()
+      shift
       ;;
     --file)
       [[ $# -ge 2 ]] || die "--file needs a path"
@@ -739,6 +747,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$AUDIT_DEFAULT" -eq 1 && ${#AUDIT_PRESETS[@]} -eq 0 ]]; then
+  for preset in $(audit_preset_list); do
+    AUDIT_PRESETS+=("$preset")
+  done
+fi
 
 if [[ "$INCLUDE_TARGETS" -eq 1 ]]; then
   add_target_probes
