@@ -263,14 +263,27 @@ audit_preset_hosts() {
   case "$1" in
     meta) cat <<'EOF'
 facebook.com|https://www.facebook.com/
+m.facebook.com|https://m.facebook.com/
+l.facebook.com|https://l.facebook.com/
+business.facebook.com|https://business.facebook.com/
 instagram.com|https://www.instagram.com/
+i.instagram.com|https://i.instagram.com/
+graph.instagram.com|https://graph.instagram.com/
+help.instagram.com|https://help.instagram.com/
 whatsapp.com|https://www.whatsapp.com/
 web.whatsapp.com|https://web.whatsapp.com/
+whatsapp.net|https://whatsapp.net/
+static.whatsapp.net|https://static.whatsapp.net/
 messenger.com|https://www.messenger.com/
 threads.net|https://www.threads.net/
 graph.facebook.com|https://graph.facebook.com/
+graph-video.facebook.com|https://graph-video.facebook.com/
+connect.facebook.net|https://connect.facebook.net/
 static.xx.fbcdn.net|https://static.xx.fbcdn.net/
+video.xx.fbcdn.net|https://video.xx.fbcdn.net/
+scontent.xx.fbcdn.net|https://scontent.xx.fbcdn.net/
 scontent.cdninstagram.com|https://scontent.cdninstagram.com/
+static.cdninstagram.com|https://static.cdninstagram.com/
 EOF
       ;;
     google) cat <<'EOF'
@@ -1629,6 +1642,11 @@ print_audit_preset() {
   section_header "Audit: $label"
   printf '    %sExpected:%s  %s  %s  cert issuer ~ %s\n\n' \
     "$C_SUBTLE" "$R" "$asn_disp_list" "$G_BULLET" "$expected_issuer"
+
+  if [[ "$preset" == "meta" ]]; then
+    printf '    %s%s%s %sNon-login Meta audit:%s verifies destination ASN/TLS identity only; Meta does not expose the source IP seen by its servers.\n\n' \
+      "$C_DIM" "$G_TIP" "$R" "$C_SUBTLE" "$R"
+  fi
 
   local ok_count=0 warn_count=0 unreach_count=0
 

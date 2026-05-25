@@ -1,10 +1,10 @@
 # Routing Source IP Detection
 
-检测 VPS 访问不同网站时，远端真实看到的出口 IP；并对常见大型服务（Meta / Google / Cloudflare / OpenAI / Reddit / GitHub）做"身份核验"，识别 DNS 劫持、BGP 劫持、本地机房中间人。
+检测 VPS 访问不同网站时，远端真实看到的出口 IP；并对常见大型服务（Meta / Google / Cloudflare / OpenAI / Reddit / GitHub）做"身份核验"，识别 DNS 劫持、BGP 劫持、本地机房中间人。对 Meta 这类不会公开回显 source IP 的服务，脚本只做非登录审计，不尝试登录账号或读取账号活动。
 
 ## What's New in 1.6.0
 
-- `--audit PRESET` —— 内置 6 个服务身份核验 preset（meta、google、cloudflare、openai、reddit、github、all）。对比 dest IP 的 ASN 跟 TLS 证书 issuer，任一不符即报警。
+- `--audit PRESET` —— 内置 6 个服务身份核验 preset（meta、google、cloudflare、openai、reddit、github、all）。对比 dest IP 的 ASN 跟 TLS 证书 issuer，任一不符即提示异常；其中 `meta` 已扩展到 Facebook / Instagram / WhatsApp / Threads / Meta CDN/API 的非登录深度审计。
 - 启动时**自动检查依赖**，缺什么就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）装上；非 root 时自动用 `sudo`。可用 `--no-install` 关掉。
 - 内置便携 `timeout` wrapper —— BSD/macOS 没有 GNU `timeout` 也能跑 `openssl s_client`。
 
@@ -36,7 +36,7 @@
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 - 默认遮蔽 IP 后两段，`--show-ip` 取消遮蔽
-- `--audit PRESET` 服务身份核验（ASN + 证书指纹），内置 6 个常用服务 preset
+- `--audit PRESET` 服务身份核验（ASN + 证书指纹），内置 6 个常用服务 preset；`meta` 为非登录深度审计
 - 启动时自动安装缺失的系统依赖（apt / dnf / yum / apk / pacman / zypper / brew）
 
 ## One-line Run
@@ -224,7 +224,9 @@ MIT
 
 ### Service Audit（`--audit`）
 
-针对常见大型服务做"身份核验"：对比 dest IP 的 ASN 跟 TLS 证书 issuer 是否符合预期。任意一项不符即可怀疑被劫持/MITM。
+针对常见大型服务做"身份核验"：对比 dest IP 的 ASN 跟 TLS 证书 issuer 是否符合预期。任意一项不符即可标记为可疑，供人工复核。
+
+注意：`--audit` 检查的是"目标服务身份"而不是"目标服务看到的 source IP"。Meta、GitHub、Google、OpenAI 等站点通常不会在普通请求里回显你的 source IP；因此在不登录账号、拿不到账号活动 IP 的前提下，脚本不会声称已经确认 Meta 看到的出口 IP。`--audit meta` 的作用是尽量覆盖更多 Meta 入口、API 与 CDN 域名，判断它们是否仍然解析/连接到 Meta 官方网络与正常证书链。
 
 ```bash
 ./routing-ip-check.sh --audit meta
@@ -236,7 +238,7 @@ MIT
 
 | Preset | 覆盖域名 | 期望 ASN | 期望 cert issuer |
 |---|---|---|---|
-| `meta` | facebook.com / instagram.com / whatsapp.com / threads.net / messenger.com / fbcdn.net / cdninstagram.com | AS32934 | DigiCert / Meta Platforms |
+| `meta` | facebook / m.facebook / l.facebook / business / graph / graph-video / connect.facebook.net / instagram / i.instagram / graph.instagram / help.instagram / whatsapp / web.whatsapp / whatsapp.net / threads / messenger / fbcdn / cdninstagram | AS32934 | DigiCert / Meta Platforms |
 | `google` | google.com / gmail.com / youtube.com / drive / docs / maps / play | AS15169 + AS396982 | Google Trust Services / GTS CA / WE1 / WR2 |
 | `cloudflare` | cloudflare.com / 1.1.1.1 / dash / workers / developers | AS13335 | Cloudflare / DigiCert / SSL.com / WE1 |
 | `openai` | openai.com / chatgpt.com / api / platform | AS13335 (CF-fronted) | DigiCert / WE1 / GTS CA |
@@ -255,6 +257,8 @@ MIT
 ─── Audit: Meta (Facebook, Instagram, WhatsApp, Threads, Messenger) ───
   Expected:  AS32934  •  cert issuer ~ DigiCert|Meta Platforms
 
+  › Non-login Meta audit: verifies destination ASN/TLS identity only; Meta does not expose the source IP seen by its servers.
+
   ✓  facebook.com       157.240.•••.•••   AS32934    DigiCert Global G2    ok
   ✓  instagram.com      157.240.•••.•••   AS32934    DigiCert Global G2    ok
   ⚠  whatsapp.com       211.21.•••.•••    AS3462     —                     ASN mismatch
@@ -272,7 +276,7 @@ MIT
 | `ok` | ASN 和证书都符合预期 | ✅ 正常 |
 | `ok-asn-only` | ASN 符合，本地没装 openssl，无法验证证书 | ⚠️ 弱通过（建议装 openssl 再跑） |
 | `ok-cert-only` | 证书符合，但 ASN 查询失败（比如 ipinfo.io 拒绝） | ⚠️ 弱通过 |
-| `ASN mismatch` | dest IP 落在预期 ASN 之外 —— **强信号**：DNS/路由层被引到非官方机房 | 🟥 报警 |
+| `ASN mismatch` | dest IP 落在预期 ASN 之外 —— **可疑信号**：可能是 DNS/路由层被引到非官方机房，也可能是服务方合法 CDN/云路径变化，需要结合域名与证书复核 | 🟥 报警 |
 | `cert mismatch` | ASN 对了，但 TLS 证书 issuer 不是该服务的合法 CA —— **MITM 铁证** | 🟥 报警 |
 | `cert fetch failed` | openssl 连不上对端 / 握手失败 | ⚠️ 需要排查 |
 | `unreachable` | 连接根本没建立（超时/refused） | ⚠️ 可能是本地网络问题 |
@@ -283,7 +287,7 @@ MIT
 1. 先看 ASN —— 不符合就直接 `ASN mismatch`，跳过证书检查（第一种方法已经定案，无需再查证书）。
 2. ASN 符合才会拉证书，与该 preset 的期望 issuer regex 对比。
 3. 出现任何 `ASN mismatch` 或 `cert mismatch` 都应当人工复核 —— 它们对应的劫持形态：
-   - `ASN mismatch` → **DNS 劫持**（本地 DNS 投毒到本地机房 IP）或 **BGP 劫持**（路由层把 AS32934 的 IP 段引到别处）
+   - `ASN mismatch` → 可能是 **DNS 劫持**（本地 DNS 投毒到本地机房 IP）、**BGP 劫持**（路由层把服务方 IP 段引到别处），也可能是服务方合法使用了新的云/CDN ASN；需要结合证书、HTTP 行为和多地对照复核
    - `cert mismatch` → **DPI/透明代理 MITM**（流量到了真 IP，但被中间盒重新封 TLS）
 
 **给在服务器自动判定的建议**：
@@ -305,7 +309,7 @@ fi
 
 | Preset | 期望 verdict 分布 |
 |---|---|
-| `meta` | 9 个全部 `ok`（或 `ok-asn-only` 当 ipinfo 失败时） |
+| `meta` | 22 个全部 `ok`（或 `ok-asn-only` 当 ipinfo 失败时） |
 | `google` | 8 个全部 `ok` |
 | `cloudflare` | 5 个全部 `ok`（`1.1.1.1` 的 cert issuer 是 `SSL.com`，已加入白名单） |
 | `openai` | 5 个全部 `ok`（CF-fronted） |
