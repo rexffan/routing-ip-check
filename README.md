@@ -14,7 +14,7 @@
 
 原因很简单：如果目标站点不主动回显你的 source IP，脚本就无法证明该站点看到的真实源 IP。Facebook 这类非 Cloudflare trace 目标即使在浏览器里一切正常，脚本也不能直接知道 Facebook 服务器看到的 source IP。
 
-所以从 `1.7.0` 开始，脚本只保留 Cloudflare trace 检测。
+所以从 `1.7.0` 开始，脚本只保留 Cloudflare trace 检测。`1.7.1` 进一步扩展了默认目标，加入更多容易被策略分流关注的 Cloudflare 站点类别。
 
 ## One-line Run
 
@@ -24,7 +24,13 @@
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh)
 ```
 
-默认会检测一组已知支持 `/cdn-cgi/trace` 的 Cloudflare 站点，并汇总这些站点看到的 source IP 分布。
+默认会检测一组已知支持 `/cdn-cgi/trace` 的 Cloudflare 站点，并汇总这些站点看到的 source IP 分布。默认类别包括：
+
+- 社交 / 创作者 / 发布：X、Quora、Patreon、OnlyFans、Medium、Substack
+- 金融 / 交易：Wise、Revolut、eToro、Coinbase、OKX、Kraken、Crypto.com、Bitget、KuCoin
+- AI / 工作 / 学习：OpenAI、Claude、Anthropic、Perplexity、Poe、Canva、Notion、Zoom、Udemy
+- 购物：Shopify、Temu、iHerb，以及部分本地购物站
+- 本地论坛、媒体、金融、交易所等 Cloudflare 站点
 
 只检测某个 Cloudflare 站点：
 

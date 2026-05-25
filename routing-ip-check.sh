@@ -8,7 +8,7 @@
 
 set -u
 
-VERSION="1.7.0"
+VERSION="1.7.1"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -78,14 +78,31 @@ TARGET_PROBES=(
   # Global — Cloudflare-confirmed
   "x.com|Social|https://x.com/cdn-cgi/trace"
   "quora.com|Social|https://quora.com/cdn-cgi/trace"
+  "Patreon|Creator|https://www.patreon.com/cdn-cgi/trace"
+  "OnlyFans|Creator|https://onlyfans.com/cdn-cgi/trace"
+  "Medium|Publishing|https://medium.com/cdn-cgi/trace"
+  "Substack|Publishing|https://substack.com/cdn-cgi/trace"
   "wise.com|Finance|https://wise.com/cdn-cgi/trace"
   "revolut.com|Finance|https://revolut.com/cdn-cgi/trace"
+  "eToro|Finance|https://www.etoro.com/cdn-cgi/trace"
   "coinbase.com|Crypto|https://coinbase.com/cdn-cgi/trace"
   "okx.com|Crypto|https://okx.com/cdn-cgi/trace"
   "kraken.com|Crypto|https://kraken.com/cdn-cgi/trace"
+  "Crypto.com|Crypto|https://crypto.com/cdn-cgi/trace"
+  "Bitget|Crypto|https://www.bitget.com/cdn-cgi/trace"
+  "KuCoin|Crypto|https://www.kucoin.com/cdn-cgi/trace"
   "openai.com|AI/Work|https://openai.com/cdn-cgi/trace"
+  "Claude|AI/Work|https://claude.ai/cdn-cgi/trace"
+  "Anthropic|AI/Work|https://www.anthropic.com/cdn-cgi/trace"
+  "Perplexity|AI/Work|https://www.perplexity.ai/cdn-cgi/trace"
+  "Poe|AI/Work|https://poe.com/cdn-cgi/trace"
   "canva.com|AI/Work|https://canva.com/cdn-cgi/trace"
   "notion.so|AI/Work|https://notion.so/cdn-cgi/trace"
+  "Zoom|AI/Work|https://zoom.us/cdn-cgi/trace"
+  "Udemy|Learning|https://www.udemy.com/cdn-cgi/trace"
+  "Shopify|Shopping|https://www.shopify.com/cdn-cgi/trace"
+  "Temu|Shopping|https://www.temu.com/cdn-cgi/trace"
+  "iHerb|Shopping|https://www.iherb.com/cdn-cgi/trace"
   # Local — Cloudflare-confirmed
   "Dcard|Forum|https://dcard.tw/cdn-cgi/trace"
   "Bahamut|Forum|https://www.gamer.com.tw/cdn-cgi/trace"
