@@ -197,6 +197,57 @@ MIT
 ./routing-ip-check.sh --connectivity www.example-gov.org
 ```
 
+### Service Audit（`--audit`）
+
+针对常见大型服务做"身份核验"：对比 dest IP 的 ASN 跟 TLS 证书 issuer 是否符合预期。任意一项不符即可怀疑被劫持/MITM。
+
+```bash
+./routing-ip-check.sh --audit meta
+./routing-ip-check.sh --audit google --audit github
+./routing-ip-check.sh --audit all              # 一次跑完所有 preset
+```
+
+支持的 preset：
+
+| Preset | 覆盖域名 | 期望 ASN | 期望 cert issuer |
+|---|---|---|---|
+| `meta` | facebook.com / instagram.com / whatsapp.com / threads.net / messenger.com / fbcdn.net / cdninstagram.com | AS32934 | DigiCert / Meta Platforms |
+| `google` | google.com / gmail.com / youtube.com / drive / docs / maps / play | AS15169 + AS396982 | Google Trust Services / GTS CA / WE1 / WR2 |
+| `cloudflare` | cloudflare.com / 1.1.1.1 / dash / workers / developers | AS13335 | Cloudflare / DigiCert / SSL.com / WE1 |
+| `openai` | openai.com / chatgpt.com / api / platform | AS13335 (CF-fronted) | DigiCert / WE1 / GTS CA |
+| `reddit` | reddit.com / old.reddit.com / *.redd.it | AS54113 (Fastly) / AS16509 (AWS) | DigiCert / Amazon / Let's Encrypt |
+| `github` | github.com / api / gist / codeload / githubusercontent | AS36459 / AS13335 | DigiCert / Sectigo / Let's Encrypt (R12) |
+
+**判定逻辑（per-host short-circuit）**：
+
+1. 先看 dest IP 的 ASN —— 不在期望列表里直接 `ASN mismatch`，**跳过证书检查**（第一种方法已经定案）
+2. ASN 通过后再拉 TLS 证书 issuer，跟期望正则对比 —— 不符即 `cert mismatch`
+3. 证书检查需要 `openssl`；缺则降级为 `ok-asn-only`（仅凭 ASN 判定）
+
+输出形如：
+
+```
+─── Audit: Meta (Facebook, Instagram, WhatsApp, Threads, Messenger) ───
+  Expected:  AS32934  •  cert issuer ~ DigiCert|Meta Platforms
+
+  ✓  facebook.com       157.240.•••.•••   AS32934    DigiCert Global G2    ok
+  ✓  instagram.com      157.240.•••.•••   AS32934    DigiCert Global G2    ok
+  ⚠  whatsapp.com       211.21.•••.•••    AS3462     —                     ASN mismatch
+  ⚠  messenger.com      157.240.•••.•••   AS32934    Local Root CA         cert mismatch
+
+  Verdict: 2 mismatches detected
+```
+
+### Dependency management
+
+脚本启动时会检查 `curl / sed / awk / grep / sort`（开 `--audit` 还会要求 `openssl`），缺啥就用系统包管理器（apt / dnf / yum / apk / pacman / zypper / brew）自动装。非 root 时会自动用 `sudo`。
+
+如果你不希望被脚本自动安装，加 `--no-install`：
+
+```bash
+./routing-ip-check.sh --no-install --audit meta   # 不装直接报错
+```
+
 ### Privacy & Aesthetics
 
 默认 IP 后两段会用 `•` 遮蔽（IPv4 后 2 octets，IPv6 后 2 hextets），方便直接截图分享：

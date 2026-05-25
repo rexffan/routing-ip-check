@@ -19,7 +19,7 @@
 
 set -u
 
-VERSION="1.5.1"
+VERSION="1.6.0"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -34,6 +34,7 @@ CONCURRENCY=1
 MASK_IP=1
 ASCII_MODE=0
 SHOW_VERBOSE=0
+AUDIT_PRESETS=()        # set by --audit PRESET (may repeat)
 
 # Terminal capability detection
 USE_COLOR=1
@@ -237,6 +238,121 @@ CONNECTIVITY_PROBES=(
 # Legacy alias — older code paths may still reference TARGET_ALL_PROBES.
 TARGET_ALL_PROBES=("${CONNECTIVITY_PROBES[@]}")
 
+# ----------------------------------------------------------------------------
+# Audit presets — service-identity checks.
+#
+# Each preset declares:
+#   audit_preset_<name>_hosts   — pipe-separated entries "label|url"
+#   audit_preset_<name>_asn     — space-separated AS numbers expected
+#   audit_preset_<name>_issuer  — regex of cert issuer keywords expected
+#
+# Verdict logic (per host):
+#   1. If dest IP ASN matches one of the expected ASNs       → ASN ok
+#      Otherwise                                             → ASN mismatch
+#      (short-circuit: cert check skipped on ASN mismatch)
+#   2. If ASN ok, fetch TLS cert issuer:
+#      Issuer matches expected regex                          → cert ok
+#      Otherwise                                              → cert mismatch
+# ----------------------------------------------------------------------------
+
+audit_preset_list() {
+  printf 'meta google cloudflare openai reddit github'
+}
+
+audit_preset_hosts() {
+  case "$1" in
+    meta) cat <<'EOF'
+facebook.com|https://www.facebook.com/
+instagram.com|https://www.instagram.com/
+whatsapp.com|https://www.whatsapp.com/
+web.whatsapp.com|https://web.whatsapp.com/
+messenger.com|https://www.messenger.com/
+threads.net|https://www.threads.net/
+graph.facebook.com|https://graph.facebook.com/
+static.xx.fbcdn.net|https://static.xx.fbcdn.net/
+scontent.cdninstagram.com|https://scontent.cdninstagram.com/
+EOF
+      ;;
+    google) cat <<'EOF'
+google.com|https://www.google.com/
+gmail.com|https://mail.google.com/
+youtube.com|https://www.youtube.com/
+drive.google.com|https://drive.google.com/
+docs.google.com|https://docs.google.com/
+maps.google.com|https://maps.google.com/
+translate.google.com|https://translate.google.com/
+play.google.com|https://play.google.com/
+EOF
+      ;;
+    cloudflare) cat <<'EOF'
+cloudflare.com|https://www.cloudflare.com/
+1.1.1.1|https://1.1.1.1/
+dash.cloudflare.com|https://dash.cloudflare.com/
+workers.cloudflare.com|https://workers.cloudflare.com/
+developers.cloudflare.com|https://developers.cloudflare.com/
+EOF
+      ;;
+    openai) cat <<'EOF'
+openai.com|https://openai.com/
+chatgpt.com|https://chatgpt.com/
+chat.openai.com|https://chat.openai.com/
+api.openai.com|https://api.openai.com/
+platform.openai.com|https://platform.openai.com/
+EOF
+      ;;
+    reddit) cat <<'EOF'
+reddit.com|https://www.reddit.com/
+old.reddit.com|https://old.reddit.com/
+i.redd.it|https://i.redd.it/
+v.redd.it|https://v.redd.it/
+preview.redd.it|https://preview.redd.it/
+EOF
+      ;;
+    github) cat <<'EOF'
+github.com|https://github.com/
+api.github.com|https://api.github.com/
+gist.github.com|https://gist.github.com/
+codeload.github.com|https://codeload.github.com/
+raw.githubusercontent.com|https://raw.githubusercontent.com/
+objects.githubusercontent.com|https://objects.githubusercontent.com/
+EOF
+      ;;
+  esac
+}
+
+audit_preset_asn() {
+  case "$1" in
+    meta)        printf '32934' ;;
+    google)      printf '15169 396982 396981' ;;
+    cloudflare)  printf '13335' ;;
+    openai)      printf '13335' ;;                # CF-fronted
+    reddit)      printf '54113 16509' ;;          # Fastly + AWS for media subdomains
+    github)      printf '36459 13335' ;;          # GitHub own + CF for githubusercontent
+  esac
+}
+
+audit_preset_issuer() {
+  case "$1" in
+    meta)        printf 'DigiCert|Meta Platforms' ;;
+    google)      printf 'Google Trust Services|GTS CA|GTS Root|WE1|WR2' ;;
+    cloudflare)  printf 'Cloudflare|Google Trust Services|DigiCert|Lets Encrypt|Let.s Encrypt|SSL Corp|SSL\.com|WE1|WR2' ;;
+    openai)      printf 'Cloudflare|DigiCert|WE1|GTS CA' ;;
+    reddit)      printf 'Let.s Encrypt|DigiCert|Amazon|Cloudflare' ;;
+    github)      printf 'DigiCert|Sectigo|Cloudflare|Lets Encrypt|Let.s Encrypt|^R[0-9]+$|^E[0-9]+$|R10|R11|R12' ;;
+  esac
+}
+
+audit_preset_label() {
+  case "$1" in
+    meta)        printf 'Meta (Facebook, Instagram, WhatsApp, Threads, Messenger)' ;;
+    google)      printf 'Google (Search, Gmail, YouTube, Drive, Maps)' ;;
+    cloudflare)  printf 'Cloudflare' ;;
+    openai)      printf 'OpenAI / ChatGPT' ;;
+    reddit)      printf 'Reddit' ;;
+    github)      printf 'GitHub' ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -258,11 +374,19 @@ Options:
       --add NAME=URL      Add a custom IP echo URL
       --cf HOST           Add Cloudflare trace probe: https://HOST/cdn-cgi/trace
       --connectivity HOST Add a reachability probe (HEAD https://HOST/)
+      --audit PRESET      Service-identity audit (compare dest IP ASN + TLS
+                          cert issuer to expected). Repeatable. PRESET ∈
+                          { meta, google, cloudflare, openai, reddit, github,
+                          all }. Cert check is skipped when ASN already
+                          disagrees with expected.
       --file FILE         Add probes from FILE — "name|url" or "name|cat|url"
                           or "name|cat|url|kind" (kind: ipecho|cf|connectivity)
       --show-ip           Reveal full IP addresses (default: mask last 2 segments)
       --ascii             Disable Unicode glyphs and box-drawing (ASCII-only)
       --verbose           Show the URL column in the results table
+      --no-install        Don't auto-install missing system packages — abort
+                          instead. By default missing deps (curl, openssl,
+                          etc.) are installed via apt/dnf/apk/brew.
   -h, --help              Show help
 
 Environment:
@@ -293,6 +417,114 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
+}
+
+# ----------------------------------------------------------------------------
+# Dependency check & auto-install
+#
+# Required at all times: curl sed awk grep sort
+# Required if --audit is used: openssl
+# Optional but nice: timeout (provided by coreutils on most distros)
+#
+# When something is missing the script tries to install it via the system
+# package manager (apt-get / dnf / yum / apk / pacman / brew). If that fails
+# or the user isn't root and sudo isn't available, the script aborts with a
+# clear "please install X" message.
+#
+# Disable auto-install with --no-install.
+# ----------------------------------------------------------------------------
+AUTO_INSTALL=1
+
+detect_pkg_manager() {
+  if   command -v apt-get >/dev/null 2>&1; then printf 'apt'
+  elif command -v dnf     >/dev/null 2>&1; then printf 'dnf'
+  elif command -v yum     >/dev/null 2>&1; then printf 'yum'
+  elif command -v apk     >/dev/null 2>&1; then printf 'apk'
+  elif command -v pacman  >/dev/null 2>&1; then printf 'pacman'
+  elif command -v zypper  >/dev/null 2>&1; then printf 'zypper'
+  elif command -v brew    >/dev/null 2>&1; then printf 'brew'
+  else printf 'none'
+  fi
+}
+
+# Map command name → package name (most are identical; only override when not).
+pkg_name_for() {
+  case "$1" in
+    awk)     printf 'gawk' ;;     # most distros, mawk on some, but gawk works
+    timeout) printf 'coreutils' ;;
+    *)       printf '%s' "$1" ;;
+  esac
+}
+
+install_packages() {
+  local pkgs=("$@") pm sudo_prefix=""
+
+  pm=$(detect_pkg_manager)
+  if [[ "$pm" == "none" ]]; then
+    die "missing dependencies (${pkgs[*]}) and no supported package manager found. Install manually."
+  fi
+
+  if [[ "$EUID" -ne 0 && "$pm" != "brew" ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo_prefix="sudo"
+    else
+      die "missing dependencies (${pkgs[*]}). Re-run as root or install manually with your package manager."
+    fi
+  fi
+
+  printf '%s%s%s installing missing deps via %s%s%s: %s%s%s\n' \
+    "${C_DIM:-}" "${G_BULLET:-*}" "${R:-}" \
+    "${C_ACCENT:-}" "$pm" "${R:-}" \
+    "${BOLD:-}" "${pkgs[*]}" "${R:-}" >&2
+
+  case "$pm" in
+    apt)
+      $sudo_prefix apt-get update -qq >&2 || true
+      $sudo_prefix DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs[@]}" >&2 \
+        || die "apt-get install failed (${pkgs[*]})"
+      ;;
+    dnf)    $sudo_prefix dnf install -y -q "${pkgs[@]}" >&2     || die "dnf install failed (${pkgs[*]})" ;;
+    yum)    $sudo_prefix yum install -y -q "${pkgs[@]}" >&2     || die "yum install failed (${pkgs[*]})" ;;
+    apk)    $sudo_prefix apk add --no-cache "${pkgs[@]}" >&2    || die "apk add failed (${pkgs[*]})" ;;
+    pacman) $sudo_prefix pacman -Sy --noconfirm "${pkgs[@]}" >&2 || die "pacman install failed (${pkgs[*]})" ;;
+    zypper) $sudo_prefix zypper --non-interactive install "${pkgs[@]}" >&2 || die "zypper install failed (${pkgs[*]})" ;;
+    brew)   brew install "${pkgs[@]}" >&2                       || die "brew install failed (${pkgs[*]})" ;;
+  esac
+}
+
+check_deps() {
+  local required=(curl sed awk grep sort)
+  local optional=()
+
+  # Only enforce openssl when an audit was requested (cert chain verification).
+  if [[ ${#AUDIT_PRESETS[@]} -gt 0 ]]; then
+    required+=(openssl)
+  fi
+
+  local missing_cmds=() missing_pkgs=() cmd pkg
+  for cmd in "${required[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing_cmds+=("$cmd")
+      pkg=$(pkg_name_for "$cmd")
+      # de-dupe
+      local already=0 p
+      for p in "${missing_pkgs[@]}"; do [[ "$p" == "$pkg" ]] && already=1 && break; done
+      [[ "$already" -eq 0 ]] && missing_pkgs+=("$pkg")
+    fi
+  done
+
+  [[ ${#missing_cmds[@]} -eq 0 ]] && return 0
+
+  if [[ "$AUTO_INSTALL" -eq 0 ]]; then
+    die "missing required commands: ${missing_cmds[*]} (auto-install disabled by --no-install)"
+  fi
+
+  install_packages "${missing_pkgs[@]}"
+
+  # Re-verify
+  for cmd in "${missing_cmds[@]}"; do
+    command -v "$cmd" >/dev/null 2>&1 || die "still missing after install: $cmd"
+  done
 }
 
 strip_url_host() {
@@ -443,6 +675,18 @@ while [[ $# -gt 0 ]]; do
       add_probe "$2" "Custom" "https://$2/" "connectivity"
       shift 2
       ;;
+    --audit)
+      [[ $# -ge 2 ]] || die "--audit needs a PRESET name"
+      if [[ "$2" == "all" ]]; then
+        for p in $(audit_preset_list); do AUDIT_PRESETS+=("$p"); done
+      else
+        case "$2" in
+          meta|google|cloudflare|openai|reddit|github) AUDIT_PRESETS+=("$2") ;;
+          *) die "--audit: unknown preset '$2' (valid: $(audit_preset_list), or all)" ;;
+        esac
+      fi
+      shift 2
+      ;;
     --file)
       [[ $# -ge 2 ]] || die "--file needs a path"
       add_probe_file "$2"
@@ -465,6 +709,10 @@ while [[ $# -gt 0 ]]; do
       SHOW_VERBOSE=1
       shift
       ;;
+    --no-install)
+      AUTO_INSTALL=0
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -483,6 +731,17 @@ if [[ "$INCLUDE_TARGETS" -eq 1 ]]; then
   add_target_probes
 fi
 
+# Inject audit-preset hosts as connectivity probes (kind=connectivity), tagged
+# with category "audit:<preset>" so the verdict phase can find them later.
+if [[ ${#AUDIT_PRESETS[@]} -gt 0 ]]; then
+  for preset in "${AUDIT_PRESETS[@]}"; do
+    while IFS='|' read -r label url; do
+      [[ -z "$label" || -z "$url" ]] && continue
+      add_probe "$label" "audit:$preset" "$url" "connectivity"
+    done < <(audit_preset_hosts "$preset")
+  done
+fi
+
 # JSON output is machine-consumed: force plain mode regardless of stdout TTY.
 if [[ "$JSON" -eq 1 ]]; then
   USE_COLOR=0
@@ -492,11 +751,7 @@ fi
 init_colors
 init_glyphs
 
-need_cmd curl
-need_cmd sed
-need_cmd awk
-need_cmd grep
-need_cmd sort
+check_deps
 
 # mask_ip — hide the last two segments of an IP for safer screenshot sharing.
 #   IPv4: 203.0.113.42      → 203.0.•.•
@@ -712,6 +967,64 @@ asn_lookup() {
   printf '%s' "${ASN_CACHE[$cache_key]}"
 }
 
+# Cert issuer lookup — used by the audit phase. Returns a single-line issuer
+# string (e.g. "C=US, O=DigiCert Inc, CN=DigiCert SHA2 ..."). Empty on failure.
+# Requires openssl; gracefully degrades if openssl is missing.
+declare -A CERT_CACHE=()
+CERT_AVAILABLE=1
+command -v openssl >/dev/null 2>&1 || CERT_AVAILABLE=0
+
+# Portable timeout: prefer GNU `timeout` / `gtimeout`; fall back to bg+kill.
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+else
+  TIMEOUT_CMD=""
+fi
+
+_run_with_deadline() {
+  # $1 = seconds, rest = command. stdout captured by caller via $(...).
+  local secs="$1"; shift
+  if [[ -n "$TIMEOUT_CMD" ]]; then
+    "$TIMEOUT_CMD" "$secs" "$@"
+    return $?
+  fi
+  # Pure-bash fallback (less precise but works on BSD/macOS without coreutils).
+  local outfile rc
+  outfile=$(mktemp)
+  ( "$@" > "$outfile" 2>/dev/null ) &
+  local pid=$!
+  ( sleep "$secs" && kill -KILL "$pid" 2>/dev/null ) &
+  local killer=$!
+  wait "$pid" 2>/dev/null
+  rc=$?
+  kill -KILL "$killer" 2>/dev/null
+  wait "$killer" 2>/dev/null
+  cat "$outfile"
+  rm -f "$outfile"
+  return "$rc"
+}
+
+get_cert_issuer() {
+  local host="$1"
+  [[ -z "$host" ]] && { printf ''; return; }
+  if [[ "$CERT_AVAILABLE" -eq 0 ]]; then
+    printf 'openssl-not-installed'; return
+  fi
+  if [[ -n "${CERT_CACHE[$host]+x}" ]]; then
+    printf '%s' "${CERT_CACHE[$host]}"
+    return
+  fi
+  local issuer
+  issuer=$( _run_with_deadline 6 bash -c \
+    "echo | openssl s_client -connect '$host:443' -servername '$host' 2>/dev/null \
+       | openssl x509 -noout -issuer 2>/dev/null" \
+    | sed -E 's/^issuer=//; s/[[:space:]]+/ /g; s/^ //; s/ $//')
+  CERT_CACHE[$host]="$issuer"
+  printf '%s' "$issuer"
+}
+
 probe_one() {
   local name="$1" cat="$2" url="$3" kind="${4:-ipecho}"
   case "$kind" in
@@ -857,6 +1170,91 @@ enrich_rows() {
   done < "$TMP_ROWS"
 
   mv "$enriched" "$TMP_ROWS"
+}
+
+# ----------------------------------------------------------------------------
+# Audit phase
+#
+# For each row tagged category="audit:<preset>":
+#   1. Look up the ASN of remote_ip (the destination we actually reached).
+#   2. If that ASN isn't in the preset's expected list → asn-mismatch (skip
+#      cert check; the first detection method already concluded).
+#   3. Otherwise fetch the TLS cert issuer:
+#      - matches the preset's issuer regex          → ok
+#      - doesn't match                              → cert-mismatch
+#      - openssl not available                      → ok-asn-only (caveat)
+#
+# Writes one line per audit host to $TMP_DIR/audit.txt:
+#   preset|name|host|verdict|asn_id|asn_name|cert_issuer|remote_ip
+# ----------------------------------------------------------------------------
+run_audit() {
+  [[ ${#AUDIT_PRESETS[@]} -eq 0 ]] && return
+  : > "$TMP_DIR/audit.txt"
+
+  # Count audit-tagged rows for progress reporting.
+  local total
+  total=$(awk -F'|' '$3 ~ /^audit:/{n++} END{print n+0}' "$TMP_ROWS")
+  [[ "$total" -eq 0 ]] && return
+  print_progress "Auditing" 0 "$total"
+
+  local done_audit=0
+  while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip kind server ttfb_ms; do
+    [[ "$cat" != audit:* ]] && continue
+    local preset="${cat#audit:}"
+    local expected_asn expected_issuer asn_meta observed_asn_name observed_asn_id
+    local verdict="" cert_issuer="" asn_ok=0
+
+    expected_asn=$(audit_preset_asn "$preset")
+    expected_issuer=$(audit_preset_issuer "$preset")
+
+    if [[ "$status" != "OK" || -z "$remote_ip" ]]; then
+      verdict="unreachable"
+    else
+      asn_meta=$(asn_lookup "$remote_ip")
+      observed_asn_name=$(printf '%s' "$asn_meta" | awk -F'|' '{print $3}')
+      observed_asn_id=$(printf '%s' "$observed_asn_name" | grep -oE 'AS[0-9]+' | head -1 | sed 's/AS//')
+
+      if [[ -z "$observed_asn_id" ]]; then
+        # ASN lookup failed — fall through to cert check for what evidence we can get.
+        cert_issuer=$(get_cert_issuer "$host")
+        if [[ "$cert_issuer" == "openssl-not-installed" || -z "$cert_issuer" ]]; then
+          verdict="inconclusive"
+        elif printf '%s' "$cert_issuer" | grep -qiE "$expected_issuer"; then
+          verdict="ok-cert-only"
+        else
+          verdict="cert-mismatch"
+        fi
+      else
+        local a
+        for a in $expected_asn; do
+          [[ "$observed_asn_id" == "$a" ]] && { asn_ok=1; break; }
+        done
+        if [[ "$asn_ok" -eq 0 ]]; then
+          verdict="asn-mismatch"     # short-circuit: skip cert check
+        else
+          cert_issuer=$(get_cert_issuer "$host")
+          if [[ "$cert_issuer" == "openssl-not-installed" ]]; then
+            verdict="ok-asn-only"
+          elif [[ -z "$cert_issuer" ]]; then
+            verdict="cert-fetch-failed"
+          elif printf '%s' "$cert_issuer" | grep -qiE "$expected_issuer"; then
+            verdict="ok"
+          else
+            verdict="cert-mismatch"
+          fi
+        fi
+      fi
+    fi
+
+    printf '%s|%s|%s|%s|%s|%s|%s|%s\n' \
+      "$preset" "$name" "$host" "$verdict" "${observed_asn_id:-}" \
+      "$(clean_field "${observed_asn_name:-}")" \
+      "$(clean_field "$cert_issuer")" "$remote_ip" \
+      >> "$TMP_DIR/audit.txt"
+
+    done_audit=$((done_audit + 1))
+    print_progress "Auditing" "$done_audit" "$total"
+  done < "$TMP_ROWS"
 }
 
 repeat_str() {
@@ -1203,6 +1601,108 @@ print_summary() {
   printf '\n'
 }
 
+# ----------------------------------------------------------------------------
+# Audit rendering — one block per preset, deduped by preset name.
+# ----------------------------------------------------------------------------
+declare -A _AUDIT_PRINTED=()
+
+print_audit() {
+  [[ ${#AUDIT_PRESETS[@]} -eq 0 ]] && return
+  [[ ! -s "$TMP_DIR/audit.txt" ]] && return
+
+  local preset
+  for preset in "${AUDIT_PRESETS[@]}"; do
+    [[ -n "${_AUDIT_PRINTED[$preset]:-}" ]] && continue
+    _AUDIT_PRINTED[$preset]=1
+    print_audit_preset "$preset"
+  done
+}
+
+print_audit_preset() {
+  local preset="$1"
+  local label expected_asn expected_issuer asn_disp_list
+  label=$(audit_preset_label "$preset")
+  expected_asn=$(audit_preset_asn "$preset")
+  expected_issuer=$(audit_preset_issuer "$preset")
+  asn_disp_list=$(printf 'AS%s' "$(printf '%s' "$expected_asn" | sed 's/ /, AS/g')")
+
+  section_header "Audit: $label"
+  printf '    %sExpected:%s  %s  %s  cert issuer ~ %s\n\n' \
+    "$C_SUBTLE" "$R" "$asn_disp_list" "$G_BULLET" "$expected_issuer"
+
+  local ok_count=0 warn_count=0 unreach_count=0
+
+  while IFS='|' read -r p name host verdict asn_id asn_name cert_issuer remote_ip; do
+    [[ "$p" != "$preset" ]] && continue
+
+    local glyph color status_text
+    case "$verdict" in
+      ok)
+        glyph="$G_OK"; color="$C_OK"; status_text="ok"
+        ok_count=$((ok_count + 1)) ;;
+      ok-asn-only)
+        glyph="$G_OK"; color="$C_OK"; status_text="asn ok (no openssl)"
+        ok_count=$((ok_count + 1)) ;;
+      ok-cert-only)
+        glyph="$G_OK"; color="$C_OK"; status_text="cert ok (asn unknown)"
+        ok_count=$((ok_count + 1)) ;;
+      asn-mismatch)
+        glyph="$G_WARN"; color="$C_WARN"; status_text="ASN mismatch"
+        warn_count=$((warn_count + 1)) ;;
+      cert-mismatch)
+        glyph="$G_WARN"; color="$C_WARN"; status_text="cert mismatch"
+        warn_count=$((warn_count + 1)) ;;
+      cert-fetch-failed)
+        glyph="$G_FAIL"; color="$C_DIM"; status_text="cert fetch failed"
+        unreach_count=$((unreach_count + 1)) ;;
+      inconclusive)
+        glyph="$G_FAIL"; color="$C_DIM"; status_text="inconclusive"
+        unreach_count=$((unreach_count + 1)) ;;
+      unreachable)
+        glyph="$G_FAIL"; color="$C_FAIL"; status_text="unreachable"
+        unreach_count=$((unreach_count + 1)) ;;
+      *)
+        glyph="$G_FAIL"; color="$C_FAIL"; status_text="$verdict"
+        unreach_count=$((unreach_count + 1)) ;;
+    esac
+
+    local masked_ip=""
+    [[ -n "$remote_ip" ]] && masked_ip=$(mask_ip "$remote_ip")
+    local asn_disp="${asn_id:+AS$asn_id}"
+    [[ -z "$asn_disp" ]] && asn_disp="—"
+
+    local issuer_disp=""
+    if [[ -n "$cert_issuer" && "$cert_issuer" != "openssl-not-installed" ]]; then
+      issuer_disp=$(printf '%s' "$cert_issuer" | sed -nE 's/.*CN=([^,]+).*/\1/p' | head -1)
+      [[ -z "$issuer_disp" ]] && issuer_disp=$(printf '%s' "$cert_issuer" | sed -nE 's/.*O=([^,]+).*/\1/p' | head -1)
+      issuer_disp=$(trunc "$issuer_disp" 26)
+    elif [[ -z "$cert_issuer" ]]; then
+      issuer_disp="—"
+    else
+      issuer_disp="(no openssl)"
+    fi
+
+    printf '    %s%s%s  %-22s  %-16s  %-10s  %-26s  %s%s%s\n' \
+      "$color" "$glyph" "$R" \
+      "$(trunc "$name" 22)" \
+      "${masked_ip:-—}" \
+      "$asn_disp" \
+      "$issuer_disp" \
+      "$color" "$status_text" "$R"
+  done < "$TMP_DIR/audit.txt"
+
+  printf '\n    %sVerdict:%s ' "$BOLD" "$R"
+  if [[ "$warn_count" -gt 0 ]]; then
+    printf '%s%d mismatch%s' "$C_WARN$BOLD" "$warn_count" "$R"
+    [[ "$warn_count" -ne 1 ]] && printf '%ses%s' "$C_WARN" "$R"
+    printf ' detected'
+  else
+    printf '%sno anomalies%s detected' "$C_OK$BOLD" "$R"
+  fi
+  [[ "$unreach_count" -gt 0 ]] && printf '  %s(%d unreachable/inconclusive)%s' "$C_DIM" "$unreach_count" "$R"
+  printf '\n'
+}
+
 count_completed_rows() {
   local total="$1" idx=0 done_count=0
   while [[ "$idx" -lt "$total" ]]; do
@@ -1284,6 +1784,7 @@ run_probes() {
 
 run_probes
 enrich_rows
+run_audit
 finish_progress
 
 if [[ "$JSON" -eq 1 ]]; then
@@ -1293,4 +1794,5 @@ else
   print_header
   print_table
   print_summary
+  print_audit
 fi
