@@ -41,13 +41,13 @@
 
 ## One-line Run
 
-不需要 clone 仓库，直接在 VPS 上一键运行：
+不需要 clone 仓库，直接在 VPS 上一键运行。下面这条默认就会包含**基础 IP echo** 和**分类目标探测**：
 
 ```bash
 bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh)
 ```
 
-默认会包含基础 IP echo 和分类目标探测。带参数也可以：
+也就是说，不加任何参数时已经会跑默认分类目标；只有想**只跑基础 IP echo** 时才需要加 `--no-targets`。带参数也可以：
 
 ```bash
 # 直连出口
