@@ -21,7 +21,7 @@
 不需要 clone 仓库，直接在 VPS 上运行：
 
 ```bash
-bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh)
 ```
 
 默认会检测一组已知支持 `/cdn-cgi/trace` 的 Cloudflare 站点，并汇总这些站点看到的 source IP 分布。默认类别包括：
@@ -35,19 +35,19 @@ bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/mai
 只检测某个 Cloudflare 站点：
 
 ```bash
-bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --no-targets --cf example.com
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh) --no-targets --cf example.com
 ```
 
 显示完整 IP：
 
 ```bash
-bash <(curl -fsSL https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh) --show-ip
+bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh) --show-ip
 ```
 
 ## Install
 
 ```bash
-curl -fsSLO https://github.com/rexffan/routing-ip-check/raw/refs/heads/main/routing-ip-check.sh
+curl -fsSLO https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh
 chmod +x routing-ip-check.sh
 ```
 
