@@ -2,13 +2,14 @@
 #
 # egress-realip-check.sh
 #
-# Routing Source IP Detection
-# Show the real egress IP observed by remote HTTP services.
+# Routing Source IP Detection — show the real egress IP observed by remote
+# HTTP services.
 #
-# Why this exists:
-#   mtr/traceroute hops are routers. The first public hop is not necessarily the
-#   source IP seen by websites, especially with policy routing, NAT, WARP, proxy,
-#   relay, or CDN-specific egress.
+# How it works:
+#   Sends HTTPS requests to a curated list of endpoints that echo back the
+#   client IP they see (ipify, ifconfig.me, Cloudflare /cdn-cgi/trace, …),
+#   then summarises the results with ASN / ISP / country lookups. Multiple
+#   distinct egress IPs in one run usually means policy-based split routing.
 #
 # Important limitation:
 #   A target website must return your client IP for us to know what that exact
@@ -278,10 +279,10 @@ Examples:
   ./egress-realip-check.sh --add "my echo=https://echo.example.com/ip"
 
 Notes:
-  This script measures the real source IP seen by remote HTTP endpoints.
-  It does not use mtr/traceroute, because route hops are not egress source IPs.
-  By default the last 2 octets (IPv4) or hextets (IPv6) are masked so screenshots
-  are safer to share. Use --show-ip when you actually need the full address.
+  Routing Source IP Detection measures the real source IP seen by remote HTTP
+  endpoints. By default the last 2 octets (IPv4) or hextets (IPv6) are masked
+  so screenshots are safer to share. Use --show-ip when you actually need the
+  full address.
 EOF
 }
 
@@ -564,7 +565,7 @@ curl_common=(
   --location
   --max-time "$TIMEOUT"
   --connect-timeout "$TIMEOUT"
-  --user-agent "Mozilla/5.0 (compatible; egress-realip-check/$VERSION; +https://github.com/rexffan/egress-realip-check)"
+  --user-agent "Mozilla/5.0 (compatible; routing-source-ip-detection/$VERSION; +https://github.com/rexffan/egress-realip-check)"
 )
 
 if [[ "$NO_PROXY" -eq 1 ]]; then
