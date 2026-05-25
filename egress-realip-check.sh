@@ -17,7 +17,7 @@
 
 set -u
 
-VERSION="1.5.0"
+VERSION="1.5.1"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -823,6 +823,27 @@ enrich_rows() {
   local enriched status name cat host url ip isp asn country http_code reason remote_ip kind server ttfb_ms meta
   enriched=$(mktemp)
 
+  # Phase 1: pre-resolve ASN for unique IPs with progress reporting.
+  # asn_lookup() caches by IP, so subsequent calls in the main loop are free.
+  # This phase is the "几秒等待" the user was complaining about — surface it.
+  if [[ "$DO_ASN" -eq 1 ]]; then
+    local -a unique_ips=()
+    while IFS= read -r ip; do
+      [[ -n "$ip" ]] && unique_ips+=("$ip")
+    done < <(awk -F'|' '$1=="OK" && $13!="connectivity" && $6!=""{print $6}' "$TMP_ROWS" | sort -u)
+
+    local total_ips=${#unique_ips[@]} done_ips=0
+    if [[ "$total_ips" -gt 0 ]]; then
+      print_progress "Resolving" 0 "$total_ips"
+      for ip in "${unique_ips[@]}"; do
+        asn_lookup "$ip" >/dev/null
+        done_ips=$((done_ips + 1))
+        print_progress "Resolving" "$done_ips" "$total_ips"
+      done
+    fi
+  fi
+
+  # Phase 2: emit enriched rows (ASN cache hits are instant).
   while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip kind server ttfb_ms; do
     if [[ "$status" == "OK" && -n "$ip" ]]; then
       meta=$(asn_lookup "$ip")
@@ -1190,17 +1211,19 @@ count_completed_rows() {
 }
 
 print_progress() {
-  local done_count="$1" total="$2" pct=100
+  local label="$1" done_count="$2" total="$3" pct=100
   [[ "$JSON" -eq 1 ]] && return
   if [[ "$total" -gt 0 ]]; then
     pct=$((done_count * 100 / total))
   fi
-  printf '\r%s%s%s Running: %3d%% (%d/%d)' "$C_DIM" "$G_BULLET" "$R" "$pct" "$done_count" "$total" >&2
+  # Pad with trailing spaces to fully overwrite any longer previous line.
+  printf '\r%s%s%s %-10s %3d%% (%d/%d)        ' \
+    "$C_DIM" "$G_BULLET" "$R" "$label" "$pct" "$done_count" "$total" >&2
 }
 
 finish_progress() {
   [[ "$JSON" -eq 1 ]] && return
-  printf '\r%s\n' "$(repeat_str ' ' 48)" >&2
+  printf '\r%s\r' "$(repeat_str ' ' 64)" >&2
 }
 
 clear_for_results() {
@@ -1211,7 +1234,7 @@ clear_for_results() {
 run_probes() {
   local total idx entry name cat url out running
   total=${#PROBES[@]}
-  print_progress 0 "$total"
+  print_progress "Probing" 0 "$total"
 
   if [[ "$CONCURRENCY" -le 1 ]]; then
     idx=0
@@ -1220,7 +1243,7 @@ run_probes() {
       [[ -z "$kind" ]] && kind="ipecho"
       probe_one "$name" "$cat" "$url" "$kind" > "$TMP_DIR/$idx.row"
       idx=$((idx + 1))
-      print_progress "$idx" "$total"
+      print_progress "Probing" "$idx" "$total"
     done
   else
     idx=0
@@ -1228,7 +1251,7 @@ run_probes() {
       while true; do
         running=$(jobs -pr | wc -l | tr -d ' ')
         [[ "$running" -lt "$CONCURRENCY" ]] && break
-        print_progress "$(count_completed_rows "$total")" "$total"
+        print_progress "Probing" "$(count_completed_rows "$total")" "$total"
         sleep 0.1
       done
       IFS='|' read -r name cat url kind <<< "$entry"
@@ -1238,13 +1261,15 @@ run_probes() {
       idx=$((idx + 1))
     done
     while [[ "$(jobs -pr | wc -l | tr -d ' ')" -gt 0 ]]; do
-      print_progress "$(count_completed_rows "$total")" "$total"
+      print_progress "Probing" "$(count_completed_rows "$total")" "$total"
       sleep 0.1
     done
     wait
-    print_progress "$total" "$total"
+    print_progress "Probing" "$total" "$total"
   fi
-  finish_progress
+  # NOTE: do not finish_progress here — enrich_rows will keep updating the
+  # same line with the "Resolving" label, so the user never sees the bar
+  # freeze at 100%.
 
   idx=0
   while [[ "$idx" -lt "$total" ]]; do
@@ -1257,6 +1282,7 @@ run_probes() {
 
 run_probes
 enrich_rows
+finish_progress
 
 if [[ "$JSON" -eq 1 ]]; then
   print_json
