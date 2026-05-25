@@ -140,22 +140,22 @@ TARGET_PROBES=(
   "openai.com|AI/Work|https://openai.com/cdn-cgi/trace|cf"
   "canva.com|AI/Work|https://canva.com/cdn-cgi/trace|cf"
   "notion.so|AI/Work|https://notion.so/cdn-cgi/trace|cf"
-  # Taiwan — Cloudflare-confirmed
-  "Dcard|TW Forum|https://dcard.tw/cdn-cgi/trace|cf"
-  "Bahamut|TW Forum|https://www.gamer.com.tw/cdn-cgi/trace|cf"
-  "Plurk|TW Forum|https://www.plurk.com/cdn-cgi/trace|cf"
-  "PanSci|TW Media|https://pansci.asia/cdn-cgi/trace|cf"
-  "中時新聞網|TW Media|https://www.chinatimes.com/cdn-cgi/trace|cf"
-  "104 人力銀行|TW Career|https://www.104.com.tw/cdn-cgi/trace|cf"
-  "StockFeel 股感|TW Finance|https://www.stockfeel.com.tw/cdn-cgi/trace|cf"
-  "LINE Bank TW|TW Finance|https://www.linebank.com.tw/cdn-cgi/trace|cf"
-  "PX Pay|TW Finance|https://www.pxpay.com/cdn-cgi/trace|cf"
-  "MaiCoin|TW Crypto|https://www.maicoin.com/cdn-cgi/trace|cf"
-  "MAX Exchange|TW Crypto|https://max.maicoin.com/cdn-cgi/trace|cf"
-  "博客來 Books|TW Shopping|https://www.books.com.tw/cdn-cgi/trace|cf"
-  "露天市集 Ruten|TW Shopping|https://www.ruten.com.tw/cdn-cgi/trace|cf"
-  "Buy123|TW Shopping|https://www.buy123.com.tw/cdn-cgi/trace|cf"
-  "citiesocial|TW Shopping|https://www.citiesocial.com/cdn-cgi/trace|cf"
+  # Local — Cloudflare-confirmed
+  "Dcard|Forum|https://dcard.tw/cdn-cgi/trace|cf"
+  "Bahamut|Forum|https://www.gamer.com.tw/cdn-cgi/trace|cf"
+  "Plurk|Forum|https://www.plurk.com/cdn-cgi/trace|cf"
+  "PanSci|Media|https://pansci.asia/cdn-cgi/trace|cf"
+  "chinatimes.com|Media|https://www.chinatimes.com/cdn-cgi/trace|cf"
+  "104.com.tw|Career|https://www.104.com.tw/cdn-cgi/trace|cf"
+  "StockFeel|Finance|https://www.stockfeel.com.tw/cdn-cgi/trace|cf"
+  "LINE Bank|Finance|https://www.linebank.com.tw/cdn-cgi/trace|cf"
+  "PX Pay|Finance|https://www.pxpay.com/cdn-cgi/trace|cf"
+  "MaiCoin|Crypto|https://www.maicoin.com/cdn-cgi/trace|cf"
+  "MAX Exchange|Crypto|https://max.maicoin.com/cdn-cgi/trace|cf"
+  "books.com.tw|Shopping|https://www.books.com.tw/cdn-cgi/trace|cf"
+  "Ruten|Shopping|https://www.ruten.com.tw/cdn-cgi/trace|cf"
+  "Buy123|Shopping|https://www.buy123.com.tw/cdn-cgi/trace|cf"
+  "citiesocial|Shopping|https://www.citiesocial.com/cdn-cgi/trace|cf"
 )
 
 # CONNECTIVITY_PROBES — only run with --targets-all.
@@ -178,58 +178,58 @@ CONNECTIVITY_PROBES=(
   "temu.com|Shopping|https://www.temu.com/|connectivity"
   "shopify.com|Shopping|https://www.shopify.com/|connectivity"
   "ikea.com|Shopping|https://www.ikea.com/|connectivity"
-  # Taiwan — Forums / community
-  "Mobile01|TW Forum|https://www.mobile01.com/|connectivity"
-  "PTT 批踢踢|TW Forum|https://www.ptt.cc/|connectivity"
-  "PIXNET 痞客邦|TW Forum|https://www.pixnet.net/|connectivity"
-  # Taiwan — Media / news
-  "聯合新聞網 UDN|TW Media|https://udn.com/|connectivity"
-  "自由時報 LTN|TW Media|https://www.ltn.com.tw/|connectivity"
-  "ETtoday|TW Media|https://www.ettoday.net/|connectivity"
-  "TVBS|TW Media|https://news.tvbs.com.tw/|connectivity"
-  "民視 FTV|TW Media|https://www.ftvnews.com.tw/|connectivity"
-  # Taiwan — Finance / banks
-  "玉山銀行 E.SUN|TW Finance|https://www.esunbank.com.tw/|connectivity"
-  "國泰世華|TW Finance|https://www.cathaybk.com.tw/|connectivity"
-  "中國信託 CTBC|TW Finance|https://www.ctbcbank.com/|connectivity"
-  "富邦銀行|TW Finance|https://www.fubon.com/|connectivity"
-  "兆豐銀行|TW Finance|https://www.megabank.com.tw/|connectivity"
-  "台灣銀行|TW Finance|https://www.bot.com.tw/|connectivity"
-  "永豐銀行 SinoPac|TW Finance|https://bank.sinopac.com/|connectivity"
-  "台新銀行|TW Finance|https://www.taishinbank.com.tw/|connectivity"
-  "第一銀行|TW Finance|https://www.firstbank.com.tw/|connectivity"
-  "MoneyDJ 理財網|TW Finance|https://www.moneydj.com/|connectivity"
-  "鉅亨網 cnYES|TW Finance|https://www.cnyes.com/|connectivity"
-  # Taiwan — Government / public
-  "總統府|TW Gov|https://www.president.gov.tw/|connectivity"
-  "行政院|TW Gov|https://www.ey.gov.tw/|connectivity"
-  "立法院|TW Gov|https://www.ly.gov.tw/|connectivity"
-  "司法院|TW Gov|https://www.judicial.gov.tw/|connectivity"
-  "內政部|TW Gov|https://www.moi.gov.tw/|connectivity"
-  "財政部|TW Gov|https://www.mof.gov.tw/|connectivity"
-  "衛福部|TW Gov|https://www.mohw.gov.tw/|connectivity"
-  "教育部|TW Gov|https://www.moe.gov.tw/|connectivity"
-  "健保署 NHI|TW Gov|https://www.nhi.gov.tw/|connectivity"
-  "疾管署 CDC|TW Gov|https://www.cdc.gov.tw/|connectivity"
-  "國稅局|TW Gov|https://www.etax.nat.gov.tw/|connectivity"
-  "中華郵政|TW Gov|https://www.post.gov.tw/|connectivity"
-  # Taiwan — Telecom / ISP
-  "中華電信|TW Telecom|https://www.cht.com.tw/|connectivity"
-  "台灣大哥大|TW Telecom|https://www.taiwanmobile.com/|connectivity"
-  "遠傳電信|TW Telecom|https://www.fetnet.net/|connectivity"
-  # Taiwan — Career / shopping fallbacks
-  "1111 人力銀行|TW Career|https://www.1111.com.tw/|connectivity"
-  "591 房屋|TW Shopping|https://www.591.com.tw/|connectivity"
-  "momoshop|TW Shopping|https://www.momoshop.com.tw/|connectivity"
-  "PChome|TW Shopping|https://24h.pchome.com.tw/|connectivity"
-  "Shopee 蝦皮|TW Shopping|https://shopee.tw/|connectivity"
-  # Taiwan — Transport / ticketing
-  "高鐵 THSR|TW Transport|https://www.thsrc.com.tw/|connectivity"
-  "台鐵 TRA|TW Transport|https://www.railway.gov.tw/|connectivity"
-  "悠遊卡|TW Transport|https://www.easycard.com.tw/|connectivity"
+  # Forums / community
+  "Mobile01|Forum|https://www.mobile01.com/|connectivity"
+  "PTT|Forum|https://www.ptt.cc/|connectivity"
+  "PIXNET|Forum|https://www.pixnet.net/|connectivity"
+  # Media / news
+  "UDN|Media|https://udn.com/|connectivity"
+  "LTN|Media|https://www.ltn.com.tw/|connectivity"
+  "ETtoday|Media|https://www.ettoday.net/|connectivity"
+  "TVBS|Media|https://news.tvbs.com.tw/|connectivity"
+  "FTV|Media|https://www.ftvnews.com.tw/|connectivity"
+  # Finance / banks
+  "E.SUN Bank|Finance|https://www.esunbank.com.tw/|connectivity"
+  "Cathay United|Finance|https://www.cathaybk.com.tw/|connectivity"
+  "CTBC|Finance|https://www.ctbcbank.com/|connectivity"
+  "Fubon|Finance|https://www.fubon.com/|connectivity"
+  "Mega Bank|Finance|https://www.megabank.com.tw/|connectivity"
+  "bot.com.tw|Finance|https://www.bot.com.tw/|connectivity"
+  "SinoPac|Finance|https://bank.sinopac.com/|connectivity"
+  "Taishin|Finance|https://www.taishinbank.com.tw/|connectivity"
+  "First Bank|Finance|https://www.firstbank.com.tw/|connectivity"
+  "MoneyDJ|Finance|https://www.moneydj.com/|connectivity"
+  "cnYES|Finance|https://www.cnyes.com/|connectivity"
+  # Government / public
+  "president.gov.tw|Gov|https://www.president.gov.tw/|connectivity"
+  "ey.gov.tw|Gov|https://www.ey.gov.tw/|connectivity"
+  "ly.gov.tw|Gov|https://www.ly.gov.tw/|connectivity"
+  "judicial.gov.tw|Gov|https://www.judicial.gov.tw/|connectivity"
+  "moi.gov.tw|Gov|https://www.moi.gov.tw/|connectivity"
+  "mof.gov.tw|Gov|https://www.mof.gov.tw/|connectivity"
+  "mohw.gov.tw|Gov|https://www.mohw.gov.tw/|connectivity"
+  "moe.gov.tw|Gov|https://www.moe.gov.tw/|connectivity"
+  "NHI|Gov|https://www.nhi.gov.tw/|connectivity"
+  "CDC|Gov|https://www.cdc.gov.tw/|connectivity"
+  "etax.nat.gov.tw|Gov|https://www.etax.nat.gov.tw/|connectivity"
+  "post.gov.tw|Gov|https://www.post.gov.tw/|connectivity"
+  # Telecom / ISP
+  "Chunghwa Telecom|Telecom|https://www.cht.com.tw/|connectivity"
+  "TWM|Telecom|https://www.taiwanmobile.com/|connectivity"
+  "FET|Telecom|https://www.fetnet.net/|connectivity"
+  # Career / shopping fallbacks
+  "1111.com.tw|Career|https://www.1111.com.tw/|connectivity"
+  "591.com.tw|Shopping|https://www.591.com.tw/|connectivity"
+  "momoshop|Shopping|https://www.momoshop.com.tw/|connectivity"
+  "PChome|Shopping|https://24h.pchome.com.tw/|connectivity"
+  "Shopee|Shopping|https://shopee.tw/|connectivity"
+  # Transport / ticketing
+  "THSR|Transport|https://www.thsrc.com.tw/|connectivity"
+  "TRA|Transport|https://www.railway.gov.tw/|connectivity"
+  "EasyCard|Transport|https://www.easycard.com.tw/|connectivity"
   # Misc
-  "KKBOX|TW Media|https://www.kkbox.com/|connectivity"
-  "LINE|TW App|https://line.me/|connectivity"
+  "KKBOX|Media|https://www.kkbox.com/|connectivity"
+  "LINE|App|https://line.me/|connectivity"
 )
 
 # Legacy alias — older code paths may still reference TARGET_ALL_PROBES.
@@ -249,7 +249,7 @@ Options:
       --no-asn            Do not query ISP/ASN metadata
       --json              Print machine-readable JSON lines (always full IP)
       --targets           Include categorized target-site probes (default)
-      --targets-all       Include unconfirmed target probes too (TW gov, banks, forums...)
+      --targets-all       Include unconfirmed target probes too (gov, banks, forums, etc.)
       --no-targets        Only run the basic IP echo probes
       --concurrency N     Number of concurrent probes (default: 1)
       --no-concurrency    Run probes serially
@@ -1193,7 +1193,7 @@ print_summary() {
   printf '    %s%s%s try %s%s --cf example.com%s to test a Cloudflare-fronted target\n' \
     "$C_DIM" "$G_TIP" "$R" "$BOLD" "$cmd_name" "$R"
   if [[ "$INCLUDE_TARGETS_ALL" -eq 0 ]]; then
-    printf '    %s%s%s use %s--targets-all%s to add reachability probes for TW gov/banks/forums\n' \
+    printf '    %s%s%s use %s--targets-all%s to add reachability probes for gov/banks/forums\n' \
       "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
     printf '    %s%s%s connectivity probes %s%s%s %sreport reachability + latency only — they do not echo your IP%s\n' \
       "$C_DIM" "$G_TIP" "$R" "$C_DIM" "$G_DASH" "$R" "$C_DIM" "$R"
