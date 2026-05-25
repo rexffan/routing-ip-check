@@ -8,7 +8,7 @@
 
 1. **ipecho 类**：直接命中通用 IP 回显接口（ipify、ifconfig.me、icanhazip 等），从响应 body 里提取 IPv4/IPv6。
 2. **cf 类**：命中 Cloudflare 站点的 `/cdn-cgi/trace` 端点，严格解析 `ip=` 行 —— 这是该 CF 站点观察到你的真实源 IP。
-3. **connectivity 类**：对不会回显 IP 的目标（台湾政府、银行、电信、媒体等）做 HEAD `/` 探测，只记录可达性、HTTP 状态、`Server` header、TTFB 和目的 IP —— **不会**返回你的出口 IP，但能告诉你"这个域名走得通吗、路由策略生效了吗"。
+3. **connectivity 类**：对不会回显 IP 的目标（政府、银行、电信、媒体等不在 CDN 上的站点）做 HEAD `/` 探测，只记录可达性、HTTP 状态、`Server` header、TTFB 和目的 IP —— **不会**返回你的出口 IP，但能告诉你"这个域名走得通吗、路由策略生效了吗"。
 
 每次探测之后，脚本对所有 OK 的出口 IP 做 ASN/ISP/国家查询（`ipinfo.io`，自动缓存去重），最后输出：
 - 每个探测的结果一行
@@ -25,8 +25,8 @@
 - 自动查询 ISP、ASN、国家/地区
 - 可忽略本机代理环境变量检测直连出口；也可指定 `socks5h` / HTTP 代理检测代理出口
 - 支持 Cloudflare 任意站点的 `/cdn-cgi/trace` 目标视角探测
-- 内置一组覆盖社交、金融、购物、交易所、AI/办公、台湾本地论坛/金融/购物的目标
-- 开 `--targets-all` 可追加台湾政府、银行、电信、传统媒体、运输等连通性探针
+- 内置一组覆盖社交、金融、购物、交易所、AI/办公、本地论坛/媒体的目标
+- 开 `--targets-all` 可追加更多本地政府、银行、电信、传统媒体、运输等连通性探针
 - 支持自定义 IP echo URL 和批量探测文件
 - 支持 JSON Lines 输出，方便脚本化处理
 - 默认遮蔽 IP 后两段，`--show-ip` 取消遮蔽
@@ -125,7 +125,7 @@ name|category|url|kind
 ```text
 my echo|https://echo.example.com/ip
 cloudflare target|CDN Trace|https://example.com/cdn-cgi/trace
-總統府|TW Gov|https://www.president.gov.tw/|connectivity
+local-bank|Finance|https://www.example-bank.com/|connectivity
 ```
 
 运行：
@@ -177,7 +177,7 @@ MIT
 | `cf` | 命中 `/cdn-cgi/trace`（Cloudflare 站点专用） | 该 CF 站点真实观察到的源 IP |
 | `connectivity` | HEAD 站点根路径 `/` | **仅可达性** — 状态码、Server header、TTFB、目的 IP。**不会**报告你的出口 IP |
 
-默认目标只含 `ipecho` + `cf`（已实测确认）。开 `--targets-all` 会**额外**追加一批台湾政府/银行/论坛/电信/媒体作为 `connectivity` 探针：
+默认目标只含 `ipecho` + `cf`（已实测确认）。开 `--targets-all` 会**额外**追加一批本地政府/银行/论坛/电信/媒体作为 `connectivity` 探针：
 
 ```bash
 ./egress-realip-check.sh --targets-all
@@ -193,8 +193,8 @@ MIT
 自定义 connectivity 目标：
 
 ```bash
-./egress-realip-check.sh --connectivity www.bot.com.tw
-./egress-realip-check.sh --connectivity www.president.gov.tw
+./egress-realip-check.sh --connectivity www.example-bank.com
+./egress-realip-check.sh --connectivity www.example-gov.org
 ```
 
 ### Privacy & Aesthetics
@@ -202,7 +202,7 @@ MIT
 默认 IP 后两段会用 `•` 遮蔽（IPv4 后 2 octets，IPv6 后 2 hextets），方便直接截图分享：
 
 ```
-✓  Cloudflare trace        CDN Trace     175.180.•••.•••  TW • AS4780 Digital United Inc.
+✓  Cloudflare trace        CDN Trace     104.16.•••.•••   US • AS13335 Cloudflare, Inc.
 ```
 
 需要完整 IP（排障时）传 `--show-ip`。注意 `--json` 输出始终保留完整 IP，给脚本消费用。
