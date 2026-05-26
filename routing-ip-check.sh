@@ -9,7 +9,7 @@
 
 set -u
 
-VERSION="1.8.0"
+VERSION="1.8.1"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -526,6 +526,44 @@ run_with_timeout() {
   fi
 }
 
+# curl_error_text — turn a curl exit code into a short kebab-case reason
+# that a human can read at a glance. Falls back to the numeric code for
+# anything not in the common-case list so unknown errors stay visible.
+# Reference: https://everything.curl.dev/usingcurl/returns
+curl_error_text() {
+  case "$1" in
+    1)  printf 'unsupported-protocol' ;;
+    3)  printf 'malformed-url' ;;
+    5)  printf 'proxy-dns-failed' ;;
+    6)  printf 'dns-resolve-failed' ;;
+    7)  printf 'connection-refused' ;;
+    8)  printf 'bad-server-reply' ;;
+    16) printf 'http2-error' ;;
+    18) printf 'partial-transfer' ;;
+    22) printf 'http-error' ;;
+    23) printf 'write-error' ;;
+    27) printf 'out-of-memory' ;;
+    28) printf 'request-timed-out' ;;
+    35) printf 'tls-handshake-failed' ;;
+    47) printf 'too-many-redirects' ;;
+    51) printf 'tls-cert-mismatch' ;;
+    52) printf 'empty-response' ;;
+    53) printf 'tls-engine-missing' ;;
+    55) printf 'send-failed' ;;
+    56) printf 'connection-dropped' ;;
+    58) printf 'local-cert-problem' ;;
+    60) printf 'tls-cert-untrusted' ;;
+    61) printf 'unknown-content-encoding' ;;
+    77) printf 'ca-bundle-missing' ;;
+    78) printf 'remote-file-missing' ;;
+    92) printf 'http2-stream-error' ;;
+    94) printf 'auth-error' ;;
+    97) printf 'proxy-tls-failed' ;;
+    98) printf 'proxy-tls-cert-error' ;;
+    *)  printf 'curl-error-%s' "$1" ;;
+  esac
+}
+
 probe_cf() {
   local name="$1" cat="$2" url="$3"
   local host body rc ip http_code remote_ip ttfb reason
@@ -543,7 +581,7 @@ probe_cf() {
   body=$(printf '%s\n' "$body" | sed '/^__RIPC_/d')
 
   if [[ "$rc" -ne 0 ]]; then
-    reason="curl-error-$rc"
+    reason=$(curl_error_text "$rc")
     printf 'FAIL|%s|%s|%s|%s|||||%s|%s|%s|%s\n' \
       "$(clean_field "$name")" "$(clean_field "$cat")" "$host" "$url" \
       "${http_code:-000}" "$reason" "$remote_ip" "${ttfb:-0}" >> "$TMP_ROWS"
