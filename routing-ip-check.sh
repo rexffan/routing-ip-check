@@ -788,9 +788,44 @@ print_row() {
 
 print_table() {
   section_header "Cloudflare Trace Probes"
+
+  # Build category-order map from PROBES so groups print in declared order
+  # regardless of which finished first in concurrent mode.
+  local -A cat_order=()
+  local order_n=0 entry _name _cat _url
+  for entry in "${PROBES[@]}"; do
+    IFS='|' read -r _name _cat _url <<< "$entry"
+    if [[ -z "${cat_order[$_cat]:-}" ]]; then
+      order_n=$((order_n + 1))
+      cat_order[$_cat]=$order_n
+    fi
+  done
+
+  # Re-sort TMP_ROWS by (category-order, original-line-number).
+  # Prefix each line with two padded sort keys, sort, strip prefix.
+  local sorted
+  sorted=$(mktemp)
+  local lineno=0 row_cat ord
+  while IFS= read -r line; do
+    lineno=$((lineno + 1))
+    row_cat=$(printf '%s' "$line" | awk -F'|' '{print $3}')
+    ord="${cat_order[$row_cat]:-9999}"
+    printf '%04d|%06d|%s\n' "$ord" "$lineno" "$line"
+  done < "$TMP_ROWS" | sort -t'|' -k1,1n -k2,2n | sed -E 's/^[0-9]+\|[0-9]+\|//' > "$sorted"
+
+  local prev_cat=""
   while IFS='|' read -r status name cat host url ip isp asn country http_code reason remote_ip ttfb; do
+    if [[ "$cat" != "$prev_cat" ]]; then
+      [[ -n "$prev_cat" ]] && printf '\n'
+      # Category sub-header: same left indent as probe rows, distinguished
+      # by dim+italic color rather than extra indent.
+      printf '  %s%s%s\n' "$C_DIM" "$cat" "$R"
+      prev_cat="$cat"
+    fi
     print_row "$status" "$name" "$cat" "$ip" "$isp" "$asn" "$country" "$reason" "$url" "$ttfb"
-  done < "$TMP_ROWS"
+  done < "$sorted"
+
+  rm -f "$sorted"
 }
 
 print_json() {
