@@ -9,7 +9,7 @@
 
 set -u
 
-VERSION="1.8.1"
+VERSION="1.8.2"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -149,16 +149,17 @@ PROBES=(
 )
 
 TARGET_PROBES=(
-  # Global — Cloudflare-confirmed
-  "quora.com|Social|https://quora.com/cdn-cgi/trace"
-  "Patreon|Creator|https://www.patreon.com/cdn-cgi/trace"
-  "OnlyFans|Creator|https://onlyfans.com/cdn-cgi/trace"
-  "Medium|Publishing|https://medium.com/cdn-cgi/trace"
-  "Substack|Publishing|https://substack.com/cdn-cgi/trace"
-  "Vimeo|Video|https://vimeo.com/cdn-cgi/trace"
+  # Finance
   "wise.com|Finance|https://wise.com/cdn-cgi/trace"
   "revolut.com|Finance|https://revolut.com/cdn-cgi/trace"
   "eToro|Finance|https://www.etoro.com/cdn-cgi/trace"
+  "LINE Bank TW|Finance|https://www.linebank.com.tw/cdn-cgi/trace"
+  "JKO Pay|Finance|https://www.jkopay.com/cdn-cgi/trace"
+  "PX Pay|Finance|https://www.pxpay.com/cdn-cgi/trace"
+  "StockFeel|Finance|https://www.stockfeel.com.tw/cdn-cgi/trace"
+  "WantGoo|Finance|https://www.wantgoo.com/cdn-cgi/trace"
+  "FinLab|Finance|https://www.finlab.tw/cdn-cgi/trace"
+  # Crypto
   "coinbase.com|Crypto|https://coinbase.com/cdn-cgi/trace"
   "okx.com|Crypto|https://okx.com/cdn-cgi/trace"
   "kraken.com|Crypto|https://kraken.com/cdn-cgi/trace"
@@ -166,6 +167,9 @@ TARGET_PROBES=(
   "Bitget|Crypto|https://www.bitget.com/cdn-cgi/trace"
   "KuCoin|Crypto|https://www.kucoin.com/cdn-cgi/trace"
   "Bitfinex|Crypto|https://www.bitfinex.com/cdn-cgi/trace"
+  "MaiCoin|Crypto|https://www.maicoin.com/cdn-cgi/trace"
+  "MAX Exchange|Crypto|https://max.maicoin.com/cdn-cgi/trace"
+  # AI / Work
   "openai.com|AI/Work|https://openai.com/cdn-cgi/trace"
   "ChatGPT|AI/Work|https://chatgpt.com/cdn-cgi/trace"
   "Claude|AI/Work|https://claude.ai/cdn-cgi/trace"
@@ -175,29 +179,26 @@ TARGET_PROBES=(
   "canva.com|AI/Work|https://canva.com/cdn-cgi/trace"
   "notion.so|AI/Work|https://notion.so/cdn-cgi/trace"
   "Zoom|AI/Work|https://zoom.us/cdn-cgi/trace"
+  # Learning
   "Udemy|Learning|https://www.udemy.com/cdn-cgi/trace"
+  # Shopping
   "Shopify|Shopping|https://www.shopify.com/cdn-cgi/trace"
   "iHerb|Shopping|https://www.iherb.com/cdn-cgi/trace"
-  # Local — Cloudflare-confirmed
+  "Books TW|Shopping|https://www.books.com.tw/cdn-cgi/trace"
+  "Ruten|Shopping|https://www.ruten.com.tw/cdn-cgi/trace"
+  "Buy123|Shopping|https://www.buy123.com.tw/cdn-cgi/trace"
+  "citiesocial|Shopping|https://www.citiesocial.com/cdn-cgi/trace"
+  # Forum
   "Dcard|Forum|https://dcard.tw/cdn-cgi/trace"
   "Bahamut|Forum|https://www.gamer.com.tw/cdn-cgi/trace"
   "Plurk|Forum|https://www.plurk.com/cdn-cgi/trace"
+  # Media
   "PanSci|Media|https://pansci.asia/cdn-cgi/trace"
   "chinatimes.com|Media|https://www.chinatimes.com/cdn-cgi/trace"
+  # Career
   "104.com.tw|Career|https://www.104.com.tw/cdn-cgi/trace"
-  "GSN|TW Government|https://gsn.nat.gov.tw/cdn-cgi/trace"
-  "LINE Bank TW|TW Finance|https://www.linebank.com.tw/cdn-cgi/trace"
-  "JKO Pay|TW Finance|https://www.jkopay.com/cdn-cgi/trace"
-  "PX Pay|TW Finance|https://www.pxpay.com/cdn-cgi/trace"
-  "StockFeel|TW Finance|https://www.stockfeel.com.tw/cdn-cgi/trace"
-  "WantGoo|TW Finance|https://www.wantgoo.com/cdn-cgi/trace"
-  "FinLab|TW Finance|https://www.finlab.tw/cdn-cgi/trace"
-  "MaiCoin|TW Crypto|https://www.maicoin.com/cdn-cgi/trace"
-  "MAX Exchange|TW Crypto|https://max.maicoin.com/cdn-cgi/trace"
-  "Books TW|TW Shopping|https://www.books.com.tw/cdn-cgi/trace"
-  "Ruten|TW Shopping|https://www.ruten.com.tw/cdn-cgi/trace"
-  "Buy123|TW Shopping|https://www.buy123.com.tw/cdn-cgi/trace"
-  "citiesocial|TW Shopping|https://www.citiesocial.com/cdn-cgi/trace"
+  # GSN
+  "GSN|GSN|https://gsn.nat.gov.tw/cdn-cgi/trace"
 )
 
 usage() {
