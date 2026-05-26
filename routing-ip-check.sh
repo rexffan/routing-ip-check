@@ -2,13 +2,14 @@
 #
 # routing-ip-check.sh
 #
-# Cloudflare Source IP Detection — ask Cloudflare-backed sites what source IP
-# they see via /cdn-cgi/trace. This is intentionally narrow: arbitrary sites
-# that do not echo the client IP cannot prove their site-specific source IP.
+# VPS Split-Routing Detector — ask a curated set of Cloudflare-backed sites
+# what source IP they see via /cdn-cgi/trace, then summarise the distribution.
+# A single source IP across all targets means a single egress; multiple IPs
+# means split routing / policy NAT / per-domain proxy chains.
 
 set -u
 
-VERSION="1.7.1"
+VERSION="1.8.0"
 IP_FLAG="-4"
 IP_LABEL="IPv4"
 TIMEOUT=8
@@ -23,6 +24,7 @@ MASK_IP=1
 ASCII_MODE=0
 SHOW_VERBOSE=0
 AUTO_INSTALL=1
+BG_MODE=""               # "" = auto-detect, "dark" / "light" = manual override
 
 USE_COLOR=1
 USE_UNICODE=1
@@ -33,6 +35,46 @@ case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
     USE_UNICODE=0 ;;
 esac
 
+# detect_bg_mode — return "light" or "dark" for the current terminal.
+#   1) honor explicit override (--light/--dark flag or env var)
+#   2) check COLORFGBG (xterm, urxvt, Konsole)
+#   3) try OSC 11 query (xterm, iTerm2, Alacritty — fails silently on Apple
+#      Terminal.app, so don't block on it)
+#   4) default to dark — most SSH/server terminals are dark
+detect_bg_mode() {
+  if [[ -n "${ROUTING_IP_CHECK_BG:-}" ]]; then
+    printf '%s' "${ROUTING_IP_CHECK_BG}"; return
+  fi
+  if [[ -n "$BG_MODE" ]]; then
+    printf '%s' "$BG_MODE"; return
+  fi
+  if [[ -n "${COLORFGBG:-}" ]]; then
+    local bg=${COLORFGBG##*;}
+    case "$bg" in
+      7|15|default) printf 'light'; return ;;
+      0|1|2|3|4|5|6|8) printf 'dark'; return ;;
+    esac
+  fi
+  if [[ -t 1 && -t 0 ]]; then
+    local resp=""
+    # Send OSC 11 query, read up to 200ms for the reply.
+    IFS= read -rs -t 0.2 -d $'\a' -p $'\033]11;?\a' resp 2>/dev/null || true
+    if [[ "$resp" =~ rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+) ]]; then
+      local r=$((16#${BASH_REMATCH[1]:0:2}))
+      local g=$((16#${BASH_REMATCH[2]:0:2}))
+      local b=$((16#${BASH_REMATCH[3]:0:2}))
+      if (( (r + g + b) / 3 > 128 )); then printf 'light'; return; fi
+      printf 'dark'; return
+    fi
+  fi
+  printf 'dark'
+}
+
+# Two palettes, designed for ≥3:1 contrast on each background.
+#   Dark-bg (default): brighter, slightly desaturated — easy on eyes on black.
+#   Light-bg: deeper, more saturated — must survive being pasted on white
+#     surfaces (Notion / chat / PR comments) where typical dark-bg colours
+#     (sage, soft amber, light gray) disappear.
 init_colors() {
   if [[ "$USE_COLOR" -eq 0 ]]; then
     R="" BOLD="" DIM=""
@@ -42,23 +84,52 @@ init_colors() {
   R=$'\033[0m'
   BOLD=$'\033[1m'
   DIM=$'\033[2m'
-  C_ACCENT=$'\033[38;5;108m'
-  C_OK=$'\033[38;5;71m'
-  C_FAIL=$'\033[38;5;167m'
-  C_WARN=$'\033[38;5;215m'
-  C_DIM=$'\033[38;5;240m'
-  C_SUBTLE=$'\033[38;5;245m'
+
+  local mode
+  mode=$(detect_bg_mode)
+  if [[ "$mode" == "light" ]]; then
+    # Light-bg palette — GitHub Light / VS Code Light Modern inspired.
+    C_ACCENT=$'\033[38;5;30m'    # deep teal-green
+    C_OK=$'\033[38;5;28m'        # forest green
+    C_FAIL=$'\033[38;5;124m'     # dark red
+    C_WARN=$'\033[38;5;130m'     # caramel orange (NOT yellow — yellow vanishes on white)
+    C_DIM=$'\033[38;5;242m'      # mid-dark gray
+    C_SUBTLE=$'\033[38;5;238m'   # darker gray (subtle MUST be darker than dim on light bg)
+  else
+    # Dark-bg palette — sage/clay/amber, soft on dark.
+    C_ACCENT=$'\033[38;5;108m'   # sage
+    C_OK=$'\033[38;5;78m'        # lively green (brighter than 71, pops on black)
+    C_FAIL=$'\033[38;5;167m'     # clay red
+    C_WARN=$'\033[38;5;215m'     # warm amber
+    C_DIM=$'\033[38;5;240m'      # mid gray
+    C_SUBTLE=$'\033[38;5;245m'   # light gray
+  fi
 }
 
 init_glyphs() {
   if [[ "$USE_UNICODE" -eq 1 && "$ASCII_MODE" -eq 0 ]]; then
+    # Status + chrome
     G_OK="✓"; G_FAIL="✗"; G_WARN="⚠"; G_BULLET="•"
     G_DASH="─"; G_VBAR="│"; G_TL="╭"; G_TR="╮"; G_BL="╰"; G_BR="╯"
-    G_DOT="╌"; G_LEAD="─"; G_BAR_FILL="▰"; G_BAR_EMPTY="▱"; G_TIP="▸"; G_MASK="•"
+    G_DOT="╌"; G_LEAD="─"; G_TIP="▸"; G_MASK="•"
+    # New for v1.8 dashboard look
+    G_DOT_OK="●"        # filled dot — OK rows
+    G_DOT_FAIL="○"      # hollow dot — FAIL rows
+    G_LEAD_BAR="▎"      # left accent bar for section headers
+    # Smooth bar: full block + 7 fractional 1/8 sub-blocks (light → heavy)
+    G_BAR_FILL="█"
+    G_BAR_S1="▏"; G_BAR_S2="▎"; G_BAR_S3="▍"; G_BAR_S4="▌"
+    G_BAR_S5="▋"; G_BAR_S6="▊"; G_BAR_S7="▉"
+    G_BAR_EMPTY=" "     # empty cell is a space — the bar shape itself implies length
   else
     G_OK="+"; G_FAIL="x"; G_WARN="!"; G_BULLET="*"
     G_DASH="-"; G_VBAR="|"; G_TL="+"; G_TR="+"; G_BL="+"; G_BR="+"
-    G_DOT="-"; G_LEAD="-"; G_BAR_FILL="#"; G_BAR_EMPTY="."; G_TIP=">"; G_MASK="x"
+    G_DOT="-"; G_LEAD="-"; G_TIP=">"; G_MASK="x"
+    G_DOT_OK="+"; G_DOT_FAIL="-"; G_LEAD_BAR="|"
+    G_BAR_FILL="#"
+    G_BAR_S1="#"; G_BAR_S2="#"; G_BAR_S3="#"; G_BAR_S4="#"
+    G_BAR_S5="#"; G_BAR_S6="#"; G_BAR_S7="#"
+    G_BAR_EMPTY="."
   fi
 }
 
@@ -67,6 +138,9 @@ C_ACCENT="" C_OK="" C_FAIL="" C_WARN="" C_DIM="" C_SUBTLE=""
 G_OK="" G_FAIL="" G_WARN="" G_BULLET="" G_DASH="" G_VBAR=""
 G_TL="" G_TR="" G_BL="" G_BR="" G_DOT="" G_LEAD=""
 G_BAR_FILL="" G_BAR_EMPTY="" G_TIP="" G_MASK=""
+G_DOT_OK="" G_DOT_FAIL="" G_LEAD_BAR=""
+G_BAR_S1="" G_BAR_S2="" G_BAR_S3="" G_BAR_S4=""
+G_BAR_S5="" G_BAR_S6="" G_BAR_S7=""
 
 # Probe entry: name|category|url
 # Every default probe must be a Cloudflare /cdn-cgi/trace URL.
@@ -76,12 +150,12 @@ PROBES=(
 
 TARGET_PROBES=(
   # Global — Cloudflare-confirmed
-  "x.com|Social|https://x.com/cdn-cgi/trace"
   "quora.com|Social|https://quora.com/cdn-cgi/trace"
   "Patreon|Creator|https://www.patreon.com/cdn-cgi/trace"
   "OnlyFans|Creator|https://onlyfans.com/cdn-cgi/trace"
   "Medium|Publishing|https://medium.com/cdn-cgi/trace"
   "Substack|Publishing|https://substack.com/cdn-cgi/trace"
+  "Vimeo|Video|https://vimeo.com/cdn-cgi/trace"
   "wise.com|Finance|https://wise.com/cdn-cgi/trace"
   "revolut.com|Finance|https://revolut.com/cdn-cgi/trace"
   "eToro|Finance|https://www.etoro.com/cdn-cgi/trace"
@@ -91,7 +165,9 @@ TARGET_PROBES=(
   "Crypto.com|Crypto|https://crypto.com/cdn-cgi/trace"
   "Bitget|Crypto|https://www.bitget.com/cdn-cgi/trace"
   "KuCoin|Crypto|https://www.kucoin.com/cdn-cgi/trace"
+  "Bitfinex|Crypto|https://www.bitfinex.com/cdn-cgi/trace"
   "openai.com|AI/Work|https://openai.com/cdn-cgi/trace"
+  "ChatGPT|AI/Work|https://chatgpt.com/cdn-cgi/trace"
   "Claude|AI/Work|https://claude.ai/cdn-cgi/trace"
   "Anthropic|AI/Work|https://www.anthropic.com/cdn-cgi/trace"
   "Perplexity|AI/Work|https://www.perplexity.ai/cdn-cgi/trace"
@@ -101,7 +177,6 @@ TARGET_PROBES=(
   "Zoom|AI/Work|https://zoom.us/cdn-cgi/trace"
   "Udemy|Learning|https://www.udemy.com/cdn-cgi/trace"
   "Shopify|Shopping|https://www.shopify.com/cdn-cgi/trace"
-  "Temu|Shopping|https://www.temu.com/cdn-cgi/trace"
   "iHerb|Shopping|https://www.iherb.com/cdn-cgi/trace"
   # Local — Cloudflare-confirmed
   "Dcard|Forum|https://dcard.tw/cdn-cgi/trace"
@@ -110,13 +185,19 @@ TARGET_PROBES=(
   "PanSci|Media|https://pansci.asia/cdn-cgi/trace"
   "chinatimes.com|Media|https://www.chinatimes.com/cdn-cgi/trace"
   "104.com.tw|Career|https://www.104.com.tw/cdn-cgi/trace"
-  "StockFeel|Finance|https://www.stockfeel.com.tw/cdn-cgi/trace"
-  "PX Pay|Finance|https://www.pxpay.com/cdn-cgi/trace"
-  "MaiCoin|Crypto|https://www.maicoin.com/cdn-cgi/trace"
-  "MAX Exchange|Crypto|https://max.maicoin.com/cdn-cgi/trace"
-  "books.com.tw|Shopping|https://www.books.com.tw/cdn-cgi/trace"
-  "Buy123|Shopping|https://www.buy123.com.tw/cdn-cgi/trace"
-  "citiesocial|Shopping|https://www.citiesocial.com/cdn-cgi/trace"
+  "GSN|TW Government|https://gsn.nat.gov.tw/cdn-cgi/trace"
+  "LINE Bank TW|TW Finance|https://www.linebank.com.tw/cdn-cgi/trace"
+  "JKO Pay|TW Finance|https://www.jkopay.com/cdn-cgi/trace"
+  "PX Pay|TW Finance|https://www.pxpay.com/cdn-cgi/trace"
+  "StockFeel|TW Finance|https://www.stockfeel.com.tw/cdn-cgi/trace"
+  "WantGoo|TW Finance|https://www.wantgoo.com/cdn-cgi/trace"
+  "FinLab|TW Finance|https://www.finlab.tw/cdn-cgi/trace"
+  "MaiCoin|TW Crypto|https://www.maicoin.com/cdn-cgi/trace"
+  "MAX Exchange|TW Crypto|https://max.maicoin.com/cdn-cgi/trace"
+  "Books TW|TW Shopping|https://www.books.com.tw/cdn-cgi/trace"
+  "Ruten|TW Shopping|https://www.ruten.com.tw/cdn-cgi/trace"
+  "Buy123|TW Shopping|https://www.buy123.com.tw/cdn-cgi/trace"
+  "citiesocial|TW Shopping|https://www.citiesocial.com/cdn-cgi/trace"
 )
 
 usage() {
@@ -142,11 +223,14 @@ Options:
       --show-ip           Reveal full IP addresses (default: mask last 2 segments)
       --ascii             Disable Unicode glyphs and box-drawing (ASCII-only)
       --verbose           Show the URL column in the results table
+      --light             Force light-background palette (darker, saturated)
+      --dark              Force dark-background palette (default for SSH terms)
       --no-install        Don't auto-install missing system packages
   -h, --help              Show help
 
 Environment:
-  NO_COLOR=1              Disable ANSI colors entirely.
+  NO_COLOR=1                       Disable ANSI colors entirely.
+  ROUTING_IP_CHECK_BG=light|dark   Pin palette without flags (e.g. for CI).
 
 Examples:
   ./routing-ip-check.sh
@@ -338,6 +422,10 @@ while [[ $# -gt 0 ]]; do
       SHOW_VERBOSE=1; shift ;;
     --no-install)
       AUTO_INSTALL=0; shift ;;
+    --light)
+      BG_MODE="light"; shift ;;
+    --dark)
+      BG_MODE="dark"; shift ;;
     -h|--help)
       usage; exit 0 ;;
     --version)
@@ -543,75 +631,154 @@ repeat_str() {
 trunc() {
   local s="$1" n="$2"
   if [[ ${#s} -gt $n ]]; then
-    printf '%s…' "${s:0:n-1}"
+    if [[ "$USE_UNICODE" -eq 1 ]]; then
+      printf '%s…' "${s:0:n-1}"
+    else
+      printf '%s...' "${s:0:n-3}"
+    fi
   else
     printf '%s' "$s"
   fi
 }
 
+# term_width — visible content width for rendering. Caps at 100 to avoid
+# stretching wide on ultra-wide terminals. Falls back to 80 when stdout is
+# not a tty (CI / piped to file).
+term_width() {
+  local cols=80
+  if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
+    cols=$(tput cols 2>/dev/null || echo 80)
+  elif [[ -n "${COLUMNS:-}" ]]; then
+    cols="$COLUMNS"
+  fi
+  [[ "$cols" -lt 60 ]] && cols=60
+  [[ "$cols" -gt 100 ]] && cols=100
+  printf '%s' "$cols"
+}
+
+# right_align — left-pad with spaces so $text ends at column $width.
+right_align() {
+  local text="$1" width="$2" pad
+  pad=$((width - ${#text}))
+  [[ "$pad" -lt 0 ]] && pad=0
+  printf '%*s%s' "$pad" '' "$text"
+}
+
+# bar_smooth — render a horizontal bar using 1/8-cell sub-blocks for smoothness.
+# Args: filled_percent (0-100), total_cells.
+# Each cell renders as the full block, a 1/8-fractional block, or empty.
+bar_smooth() {
+  local pct="$1" cells="$2"
+  [[ "$pct" -lt 0 ]] && pct=0
+  [[ "$pct" -gt 100 ]] && pct=100
+  local total_eighths=$(( pct * cells * 8 / 100 ))
+  local full_cells=$(( total_eighths / 8 ))
+  local remainder=$(( total_eighths % 8 ))
+  local out=""
+  local i
+  for ((i=0; i<full_cells; i++)); do out+="${G_BAR_FILL}"; done
+  if [[ "$remainder" -gt 0 && "$full_cells" -lt "$cells" ]]; then
+    case "$remainder" in
+      1) out+="${G_BAR_S1}" ;;
+      2) out+="${G_BAR_S2}" ;;
+      3) out+="${G_BAR_S3}" ;;
+      4) out+="${G_BAR_S4}" ;;
+      5) out+="${G_BAR_S5}" ;;
+      6) out+="${G_BAR_S6}" ;;
+      7) out+="${G_BAR_S7}" ;;
+    esac
+    full_cells=$((full_cells + 1))
+  fi
+  local empty=$(( cells - full_cells ))
+  for ((i=0; i<empty; i++)); do out+="${G_BAR_EMPTY}"; done
+  printf '%s' "$out"
+}
+
 section_header() {
   local label="$1"
-  printf '\n  %s%s%s %s%s%s %s%s%s\n' \
-    "$C_DIM" "$(repeat_str "$G_DASH" 3)" "$R" \
-    "$C_ACCENT$BOLD" "$label" "$R" \
-    "$C_DIM" "$(repeat_str "$G_DASH" 50)" "$R"
+  printf '\n  %s%s%s %s%s%s\n\n' \
+    "$C_ACCENT" "$G_LEAD_BAR" "$R" \
+    "$BOLD" "$label" "$R"
 }
 
 print_header() {
-  local title="Cloudflare Source IP Detection"
+  local title="routing-ip-check"
+  local version_tag="v${VERSION}"
   local mode="direct"
   [[ "$NO_PROXY" -eq 1 ]] && mode="no-proxy"
   [[ -n "$PROXY_URL" ]] && mode="proxy"
-  local meta=" ${IP_LABEL}  ${G_BULLET}  ${mode}  ${G_BULLET}  ${#PROBES[@]} Cloudflare probes  ${G_BULLET}  ${CONCURRENCY} worker$([[ $CONCURRENCY -gt 1 ]] && echo s)"
+  local worker_label="worker"
+  [[ "$CONCURRENCY" -gt 1 ]] && worker_label="workers"
+  local probe_label="cf probe"
+  [[ "${#PROBES[@]}" -gt 1 ]] && probe_label="cf probes"
+  local meta="${IP_LABEL}  ${G_BULLET}  ${mode}  ${G_BULLET}  ${#PROBES[@]} ${probe_label}  ${G_BULLET}  ${CONCURRENCY} ${worker_label}"
   [[ "$MASK_IP" -eq 1 ]] && meta="${meta}  ${G_BULLET}  masked"
-  local inner_w title_w meta_w pad_title pad_meta
-  title_w=${#title}
-  meta_w=${#meta}
-  inner_w=$title_w
-  [[ $meta_w -gt $inner_w ]] && inner_w=$meta_w
-  inner_w=$((inner_w + 4))
-  pad_title=$((inner_w - title_w - 3))
-  pad_meta=$((inner_w - meta_w - 1))
-  [[ $pad_title -lt 0 ]] && pad_title=0
-  [[ $pad_meta -lt 0 ]] && pad_meta=0
 
-  printf '\n'
-  printf '%s%s%s %s%s%s %s%s\n' \
-    "$C_DIM" "$G_TL$G_DASH" "$R" "$C_ACCENT$BOLD" "$title" "$R" \
-    "$C_DIM$(repeat_str "$G_DASH" "$pad_title")$G_TR$R" ""
-  printf '%s%s%s %s%s%s%s%s\n' \
-    "$C_DIM" "$G_VBAR" "$R" "$C_SUBTLE" "$meta" "$R" \
-    "$C_DIM" "$(repeat_str ' ' "$pad_meta")$G_VBAR$R"
-  printf '%s%s%s%s\n' "$C_DIM" "$G_BL" "$(repeat_str "$G_DASH" "$inner_w")$G_BR" "$R"
-  printf '\n'
+  local cols pad
+  cols=$(term_width)
+  # Title row: bold project name on left, dim version on right
+  pad=$(( cols - 2 - ${#title} - ${#version_tag} ))
+  [[ "$pad" -lt 1 ]] && pad=1
+  printf '\n  %s%s%s%*s%s%s%s\n' \
+    "$BOLD$C_ACCENT" "$title" "$R" \
+    "$pad" '' \
+    "$C_DIM" "$version_tag" "$R"
+
+  # Horizontal rule under title — full content width
+  local rule_w=$(( cols - 4 ))
+  [[ "$rule_w" -lt 10 ]] && rule_w=10
+  printf '  %s%s%s\n' "$C_DIM" "$(repeat_str "$G_DASH" "$rule_w")" "$R"
+
+  # Meta line
+  printf '  %s%s%s\n\n' "$C_SUBTLE" "$meta" "$R"
 }
 
 print_row() {
   local status="$1" name="$2" cat="$3" ip="$4" isp="$5" asn="$6" country="$7" reason="$8" url="$9" ttfb="${10}"
-  local total_w_name=22 total_w_cat=12 total_w_ip=18 glyph color name_color masked right=""
+  local cols name_w ip_w meta_w glyph color masked right=""
+  cols=$(term_width)
+  # Layout budget: 2 (indent) + 1 (dot) + 2 (gap) + name_w + 2 (gap) + ip_w + 2 (gap) + meta_w = cols
+  # Reserve 18 for IP column (masked IPv4 fits in 16, IPv6 needs more)
+  ip_w=18
+  # Name column scales with width; cap at 28 chars
+  name_w=$(( cols - 7 - ip_w - 28 ))
+  [[ "$name_w" -lt 18 ]] && name_w=18
+  [[ "$name_w" -gt 28 ]] && name_w=28
+  meta_w=$(( cols - 7 - name_w - ip_w ))
+  [[ "$meta_w" -lt 12 ]] && meta_w=12
+
   if [[ "$status" == "OK" ]]; then
-    glyph="$G_OK"; color="$C_OK"; name_color=""
+    glyph="$G_DOT_OK"; color="$C_OK"
   else
-    glyph="$G_FAIL"; color="$C_FAIL"; name_color="$C_DIM"
+    glyph="$G_DOT_FAIL"; color="$C_DIM"
   fi
-  name=$(trunc "$name" "$total_w_name")
-  cat=$(trunc "$cat" "$total_w_cat")
+  name=$(trunc "$name" "$name_w")
 
   if [[ "$status" == "OK" && -n "$ip" ]]; then
     masked=$(mask_ip "$ip")
+    # Right side: country · ASN · ms — joined with bullets, right-aligned
     [[ -n "$country" && "$country" != "N/A" ]] && right="$country"
     [[ -n "$asn" && "$asn" != "N/A" ]] && right="${right:+$right $G_BULLET }$asn"
-    [[ -n "$isp" && "$isp" != "N/A" ]] && right="${right:+$right }$(trunc "$isp" 26)"
-    [[ -n "$ttfb" && "$ttfb" != "0" ]] && right="${right:+$right $G_BULLET }${ttfb}ms"
-    printf '  %s%s%s  %-*s  %s%-*s%s  %s%-*s%s  %s%s%s\n' \
-      "$color" "$glyph" "$R" "$total_w_name" "$name" \
-      "$C_SUBTLE" "$total_w_cat" "$cat" "$R" \
-      "$BOLD" "$total_w_ip" "$masked" "$R" \
-      "$C_SUBTLE" "$right" "$R"
+    if [[ -n "$ttfb" && "$ttfb" != "0" ]]; then
+      right="${right:+$right $G_BULLET }${ttfb}ms"
+    fi
+    # If verbose, also show ISP truncated
+    if [[ "$SHOW_VERBOSE" -eq 1 && -n "$isp" && "$isp" != "N/A" ]]; then
+      right="$right $G_BULLET $(trunc "$isp" 20)"
+    fi
+    right=$(trunc "$right" "$meta_w")
+    printf '  %s%s%s  %-*s  %s%-*s%s  %s%s%s\n' \
+      "$color" "$glyph" "$R" \
+      "$name_w" "$name" \
+      "$BOLD" "$ip_w" "$masked" "$R" \
+      "$C_SUBTLE" "$(right_align "$right" "$meta_w")" "$R"
   else
-    printf '  %s%s%s  %s%-*s%s  %s%-*s%s  %s%s %s%s\n' \
-      "$color" "$glyph" "$R" "$name_color" "$total_w_name" "$name" "$R" \
-      "$C_DIM" "$total_w_cat" "$cat" "$R" "$C_DIM" "$G_LEAD" "${reason:-no-data}" "$R"
+    # FAIL row: dot + name + reason (dim) — no IP / meta columns
+    local why="${reason:-no-data}"
+    printf '  %s%s%s  %s%-*s%s  %s%s%s\n' \
+      "$color" "$glyph" "$R" \
+      "$C_DIM" "$name_w" "$name" "$R" \
+      "$C_DIM" "$why" "$R"
   fi
 
   if [[ "$SHOW_VERBOSE" -eq 1 ]]; then
@@ -637,49 +804,54 @@ print_json() {
   done < "$TMP_ROWS"
 }
 
-render_bar() {
-  local filled="$1" total="$2" i out=""
-  for ((i=0; i<total; i++)); do
-    if [[ $i -lt $filled ]]; then out="${out}${G_BAR_FILL}"; else out="${out}${G_BAR_EMPTY}"; fi
-  done
-  printf '%s' "$out"
-}
-
 print_summary() {
-  local total ok fail unique max_count
+  local total ok fail unique cols bar_cells
   total=$(awk -F'|' '{n++} END{print n+0}' "$TMP_ROWS")
   ok=$(awk -F'|' '$1=="OK"{n++} END{print n+0}' "$TMP_ROWS")
   fail=$((total - ok))
   unique=$(awk -F'|' '$1=="OK" && $6!=""{print $6}' "$TMP_ROWS" | sort -u | wc -l | tr -d ' ')
 
+  cols=$(term_width)
+  # Distribution bar width: more cells on wider terminals, min 14 on narrow.
+  bar_cells=24
+  [[ "$cols" -lt 80 ]] && bar_cells=18
+  [[ "$cols" -lt 70 ]] && bar_cells=14
+
   section_header "Summary"
-  printf '    %sCloudflare%s   %s%s%s ok  %s%s%s  %s%s%s fail  %s%s%s  %s%s%s unique IP%s\n' \
-    "$C_ACCENT$BOLD" "$R" \
-    "$BOLD$C_OK" "$ok" "$R" "$C_DIM" "$G_BULLET" "$R" \
-    "$BOLD$C_FAIL" "$fail" "$R" "$C_DIM" "$G_BULLET" "$R" \
-    "$BOLD$C_ACCENT" "$unique" "$R" "$([[ $unique -ne 1 ]] && echo s)"
+  printf '    %s%s%s ok   %s%s%s   %s%s%s fail   %s%s%s   %s%s%s unique IP%s\n' \
+    "$BOLD$C_OK" "$ok" "$R" \
+    "$C_DIM" "$G_BULLET" "$R" \
+    "$BOLD$C_FAIL" "$fail" "$R" \
+    "$C_DIM" "$G_BULLET" "$R" \
+    "$BOLD$C_ACCENT" "$unique" "$R" \
+    "$([[ $unique -ne 1 ]] && echo s)"
 
   if [[ "$ok" -gt 0 ]]; then
     section_header "Source IP Distribution"
-    max_count=$(awk -F'|' '$1=="OK" && $6!=""{print $6 "|" $7 "|" $8 "|" $9}' "$TMP_ROWS" |
-      sort | uniq -c | awk '{print $1}' | sort -nr | head -1)
-    [[ -z "$max_count" || "$max_count" -eq 0 ]] && max_count=1
 
-    awk -F'|' '$1=="OK" && $6!=""{print $6 "|" $7 "|" $8 "|" $9}' "$TMP_ROWS" |
+    awk -F'|' -v tot="$ok" '$1=="OK" && $6!=""{print $6 "|" $7 "|" $8 "|" $9}' "$TMP_ROWS" |
       sort |
       awk -F'|' '{key=$1 "|" $2 "|" $3 "|" $4; count[key]++} END{for (k in count) print count[k] "|" k}' |
       sort -t'|' -k1,1nr |
       while IFS='|' read -r count ip isp asn country; do
-        local filled bar masked_ip line_meta=""
-        filled=$((count * 20 / max_count))
-        [[ "$filled" -lt 1 && "$count" -gt 0 ]] && filled=1
-        bar=$(render_bar "$filled" 20)
+        local pct bar masked_ip line_meta=""
+        # Percentage of the OK subset (not total) — denominator that "feels right"
+        pct=$(( count * 100 / ok ))
+        # Minimum visible bar for any non-zero count
+        [[ "$pct" -lt 1 && "$count" -gt 0 ]] && pct=1
+        bar=$(bar_smooth "$pct" "$bar_cells")
         masked_ip=$(mask_ip "$ip")
         [[ -n "$country" && "$country" != "N/A" ]] && line_meta="$country"
         [[ -n "$asn" && "$asn" != "N/A" ]] && line_meta="${line_meta:+$line_meta $G_BULLET }$asn"
         [[ -n "$isp" && "$isp" != "N/A" ]] && line_meta="${line_meta:+$line_meta }$(trunc "$isp" 26)"
-        printf '    %s%s%s  %s%2d%s  %s%-16s%s  %s%s%s\n' \
-          "$C_ACCENT" "$bar" "$R" "$BOLD" "$count" "$R" "$BOLD" "$masked_ip" "$R" "$C_SUBTLE" "$line_meta" "$R"
+        # Layout: bar | count | pct | ip | meta
+        printf '    %s%s%s  %s%3d%s %s%s%s %s%4d%%%s   %s%-16s%s  %s%s%s\n' \
+          "$C_ACCENT" "$bar" "$R" \
+          "$BOLD" "$count" "$R" \
+          "$C_DIM" "$G_BULLET" "$R" \
+          "$C_SUBTLE" "$pct" "$R" \
+          "$BOLD" "$masked_ip" "$R" \
+          "$C_SUBTLE" "$line_meta" "$R"
       done
   fi
 
@@ -688,14 +860,15 @@ print_summary() {
       "$C_WARN" "$G_WARN" "$R" "$BOLD" "$R"
   fi
 
-  section_header "Hints"
+  section_header "Tips"
   if [[ "$MASK_IP" -eq 1 ]]; then
-    printf '    %s%s%s pass %s--show-ip%s to reveal full addresses\n' "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
+    printf '    %s%s%s  %s--show-ip%s          reveal full IPs\n' \
+      "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
   fi
-  printf '    %s%s%s add a specific Cloudflare-backed site with %s--cf example.com%s\n' \
+  printf '    %s%s%s  %s--cf example.com%s   add a specific Cloudflare site\n' \
     "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
-  printf '    %s%s%s non-Cloudflare sites that do not expose your IP cannot be verified by this script\n\n' \
-    "$C_DIM" "$G_TIP" "$R"
+  printf '    %s%s%s  %s--json%s             machine-readable output\n\n' \
+    "$C_DIM" "$G_TIP" "$R" "$BOLD" "$R"
 }
 
 print_progress() {
@@ -708,7 +881,9 @@ print_progress() {
 
 finish_progress() {
   [[ "$JSON" -eq 1 || ! -t 1 ]] && return
-  printf '\r%*s\r' 80 ''
+  local cols
+  cols=$(term_width)
+  printf '\r%*s\r' "$cols" ''
 }
 
 clear_for_results() {

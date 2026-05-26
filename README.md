@@ -1,36 +1,24 @@
-# Cloudflare Source IP Detection
+# routing-ip-check
 
-一个专门检测 **Cloudflare 站点实际看到的源 IP** 的 Bash 脚本。
+> **VPS 分流测试** —— 检测一台 VPS 是不是对不同站点走不同出口 IP。
+>
+> 用 Cloudflare 站点的 `/cdn-cgi/trace` 作为可信的"源 IP 镜子"，让多个 CF 站点告诉你它们各自看到的 source IP。**所有结果一致 = 单出口；出现多个 IP = 分流 / 策略 NAT / 按域名代理。**
 
-它只请求 Cloudflare 站点的 `/cdn-cgi/trace`，并严格解析返回里的 `ip=`。这类结果能回答一个很具体的问题：
+## When to use
 
-> 这个 Cloudflare 站点看到我的 source IP 是什么？
-
-如果机房对不同 Cloudflare 站点做了分流、策略 NAT、透明代理或源地址替换，多个 `/cdn-cgi/trace` 结果可能会出现不同 IP。
-
-## 重要边界
-
-这个脚本**不检测**普通站点的可达性，也**不做** Meta / Google / GitHub / Reddit 之类 ASN/TLS audit。
-
-原因很简单：如果目标站点不主动回显你的 source IP，脚本就无法证明该站点看到的真实源 IP。Facebook 这类非 Cloudflare trace 目标即使在浏览器里一切正常，脚本也不能直接知道 Facebook 服务器看到的 source IP。
-
-所以从 `1.7.0` 开始，脚本只保留 Cloudflare trace 检测。`1.7.1` 进一步扩展了默认目标，加入更多容易被策略分流关注的 Cloudflare 站点类别。
+- 跨境业务 VPS 配置了多线路 / 多公网 IP，想验证是不是真在按域名分流
+- 企业网关 / 防火墙做了策略 NAT，想知道哪些站点被重写了 source IP
+- WARP / WireGuard / Tunnel 配置完，验证 split-tunnel 是否按预期工作
+- 代理选择器（V2Ray / sing-box / clash 等）规则调试 —— 不同 CF 站点是否真走不同出口
+- 调试 anycast CDN edge 地理路由：看 CF 边缘节点是不是稳定命中预期机房
 
 ## One-line Run
 
-不需要 clone 仓库，直接在 VPS 上运行：
+不需要 clone 仓库，直接在 VPS 上：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh)
 ```
-
-默认会检测一组已知支持 `/cdn-cgi/trace` 的 Cloudflare 站点，并汇总这些站点看到的 source IP 分布。默认类别包括：
-
-- 社交 / 创作者 / 发布：X、Quora、Patreon、OnlyFans、Medium、Substack
-- 金融 / 交易：Wise、Revolut、eToro、Coinbase、OKX、Kraken、Crypto.com、Bitget、KuCoin
-- AI / 工作 / 学习：OpenAI、Claude、Anthropic、Perplexity、Poe、Canva、Notion、Zoom、Udemy
-- 购物：Shopify、Temu、iHerb，以及部分本地购物站
-- 本地论坛、媒体、金融、交易所等 Cloudflare 站点
 
 只检测某个 Cloudflare 站点：
 
@@ -38,10 +26,44 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/mai
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh) --no-targets --cf example.com
 ```
 
-显示完整 IP：
+显示完整 IP（默认遮蔽后两段）：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rexffan/routing-ip-check/main/routing-ip-check.sh) --show-ip
+```
+
+## Sample Output
+
+```
+  routing-ip-check                                                        v1.8.0
+  ────────────────────────────────────────────────────────────────────────────
+  IPv4  •  direct  •  44 cf probes  •  4 workers  •  masked
+
+
+  ▎ Cloudflare Trace Probes
+
+  ●  Cloudflare trace            175.180.•••.•••                          98ms
+  ●  openai.com                  175.180.•••.•••              US · AS13335  142ms
+  ●  wise.com                    175.180.•••.•••              US · AS13335  201ms
+  ●  LINE Bank TW                121.18.•••.•••               TW · AS13335   18ms
+  ●  PX Pay                      121.18.•••.•••               TW · AS13335   21ms
+  ○  some-broken.com             http-404
+
+  ▎ Summary
+
+    42 ok   •   1 fail   •   2 unique IPs
+
+  ▎ Source IP Distribution
+
+    ████████████████████████   42 •   95%   175.180.•••.•••   US · AS13335
+    █▍                          2 •    5%   121.18.•••.•••   TW · AS13335
+
+  ⚠  Different Cloudflare sites observed different source IPs — likely split routing or policy NAT.
+
+  ▎ Tips
+    ▸  --show-ip          reveal full IPs
+    ▸  --cf example.com   add a specific Cloudflare site
+    ▸  --json             machine-readable output
 ```
 
 ## Install
@@ -51,67 +73,37 @@ curl -fsSLO https://raw.githubusercontent.com/rexffan/routing-ip-check/main/rout
 chmod +x routing-ip-check.sh
 ```
 
-## Usage
+## Options
 
-```bash
-./routing-ip-check.sh
-```
-
-常用参数：
-
-```bash
-./routing-ip-check.sh --cf example.com
-./routing-ip-check.sh --no-targets --cf example.com
-./routing-ip-check.sh --show-ip
-./routing-ip-check.sh --json --no-asn
-./routing-ip-check.sh --concurrency 8
-./routing-ip-check.sh --proxy socks5h://127.0.0.1:1080
-./routing-ip-check.sh --no-proxy
-```
-
-## How It Works
-
-Cloudflare 提供一个调试端点：
-
-```text
-https://example.com/cdn-cgi/trace
-```
-
-返回内容里通常会有：
-
-```text
-ip=203.0.113.10
-colo=NRT
-http=http/2
-tls=TLSv1.3
-...
-```
-
-脚本只提取 `ip=`。这个 IP 就是该 Cloudflare 站点观察到的客户端源 IP。
-
-输出会包含：
-
-- 每个 Cloudflare trace 目标看到的 source IP
-- IP 分布统计
-- 如果出现多个 source IP，会提示可能存在分流或策略 NAT
-- 默认遮蔽 IP 后两段，便于截图
+| Flag | 作用 |
+|---|---|
+| `--cf HOST` | 加一个 Cloudflare trace 目标 `https://HOST/cdn-cgi/trace` |
+| `--file FILE` | 从文件批量加 CF trace 目标 |
+| `--no-targets` | 不跑内置目标列表，只跑你显式 `--cf` 加的 |
+| `--show-ip` | 显示完整 IP（默认遮蔽后两段，截图友好） |
+| `--no-proxy` | 忽略 `http_proxy` / `https_proxy` 环境变量 |
+| `--proxy URL` | 走指定代理，例如 `socks5h://127.0.0.1:1080` |
+| `--concurrency N` | 并发数（默认 1 串行） |
+| `--no-asn` | 不查询 ASN / ISP / 国家（更快） |
+| `--json` | 输出 JSON Lines，机器消费用 |
+| `--light` / `--dark` | 手动指定白底 / 黑底配色（自动探测失败时） |
+| `--ascii` | 关闭 Unicode 字形，纯 ASCII |
+| `--no-install` | 不要自动安装缺失依赖 |
 
 ## Custom Cloudflare Targets
 
-手动添加一个 Cloudflare 站点：
+直接 `--cf` 加一个：
 
 ```bash
-./routing-ip-check.sh --cf example.com
+./routing-ip-check.sh --cf shop.example.com
 ```
 
-批量添加：
+或者用 `--file probes.txt` 批量：
 
 ```text
-my site|https://example.com/cdn-cgi/trace
-shop cf|Shopping|https://shop.example.com/cdn-cgi/trace
+my-site|https://shop.example.com/cdn-cgi/trace
+api|CDN Trace|https://api.example.com/cdn-cgi/trace
 ```
-
-运行：
 
 ```bash
 ./routing-ip-check.sh --file probes.txt
@@ -125,11 +117,22 @@ shop cf|Shopping|https://shop.example.com/cdn-cgi/trace
 ./routing-ip-check.sh --json --no-asn
 ```
 
-示例：
+每行一条记录：
 
 ```json
-{"status":"OK","name":"Cloudflare trace","category":"CDN Trace","kind":"cf","host":"www.cloudflare.com","url":"https://www.cloudflare.com/cdn-cgi/trace","ip":"203.0.113.10","isp":"","asn":"","country":"","http_code":"200","reason":"","remote_ip":"104.16.123.96","ttfb_ms":"120"}
+{"status":"OK","name":"Cloudflare trace","kind":"cf","host":"www.cloudflare.com","ip":"203.0.113.10","ttfb_ms":"120", ...}
 ```
+
+## How It Works
+
+Cloudflare 在每个站点上挂了一个 `/cdn-cgi/trace` 端点，返回里有 `ip=` 字段 —— 这是该站点观察到的客户端源 IP。脚本对一组确认会回显的 CF 站点跑这个端点，汇总它们各自看到的 IP；**全部一致 = 单出口；出现差异 = 该 VPS 有分流 / 策略 NAT / 按域名代理**。
+
+## Limitations
+
+- 只适合 Cloudflare 站点。
+- 非 Cloudflare 站点（Meta / Google 等）如果没有等价的 source-IP 回显端点，脚本不能确认它看到的源 IP。
+- 如果机房只对某个白名单域名做源地址替换，而你没有该目标的回显能力，脚本无法直接证明。
+- 如果 Cloudflare 站点关闭或拦截 `/cdn-cgi/trace`，该目标会失败。
 
 ## Requirements
 
@@ -139,18 +142,7 @@ shop cf|Shopping|https://shop.example.com/cdn-cgi/trace
 - curl
 - sed / awk / grep / sort
 
-脚本启动时会自动检查依赖，缺少时尝试用系统包管理器安装：`apt` / `dnf` / `yum` / `apk` / `pacman` / `zypper` / `brew`。不希望自动安装可以加：
-
-```bash
-./routing-ip-check.sh --no-install
-```
-
-## Limitations
-
-- 只适合 Cloudflare 站点。
-- 非 Cloudflare 站点如果没有等价的 source-IP 回显端点，脚本不能确认它看到的源 IP。
-- 如果机房只对白名单域名例如 `facebook.com` 做源地址替换，而你没有该目标的 source-IP 回显能力，这个脚本无法直接证明。
-- 如果 Cloudflare 站点关闭或拦截 `/cdn-cgi/trace`，该目标会失败。
+脚本启动时会自动检查依赖，缺少时尝试用系统包管理器安装：`apt` / `dnf` / `yum` / `apk` / `pacman` / `zypper` / `brew`。不希望自动安装可以加 `--no-install`。
 
 ## License
 
